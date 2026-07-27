@@ -453,7 +453,13 @@ fn run_split(cli: SplitArgs) -> Result<()> {
     let total_samples = match (cli.total_samples, cli.duration) {
         (Some(n), _) => n,
         (None, Some(secs)) => (secs * sample_rate_hz) as u64,
-        (None, None) => capture_samples(&cli.input, format)?,
+        (None, None) => match split::rf_tags(&cli.input).and_then(|t| t.total_samples) {
+            Some(n) => {
+                eprintln!("using the capture's own RF_TOTAL_SAMPLES tag: {n} samples");
+                n
+            }
+            None => capture_samples(&cli.input, format)?,
+        },
     };
 
     let mut last = 0u64;

@@ -56,6 +56,14 @@ its stream MD5 cleared, so a piece never claims the length of the whole capture.
 Pieces overlap slightly (2 s by default) because a decoder needs a moment to lock
 sync at a cold start; `merge` trims that back out.
 
+If the capture records its own length in a `RF_TOTAL_SAMPLES` / `RF_SAMPLE_RATE`
+Vorbis tag - MISRC and recent DomesDay Duplicator captures do - `split` reads it
+and needs no `--total-samples`. Two tag schemas exist and telling them apart
+matters: when `RF_SAMPLE_RATE` is below 1 MHz both values are the "/1000" header
+ones and need scaling. That reading follows
+[FLAC-Chop](https://github.com/harrypm/FLAC-Chop), which worked it out first.
+Older captures carry an empty comment block and still need the length stated.
+
 The manifest it writes records where each piece sits on the tape. **Keep it** -
 a decode numbers its fields from the start of its own input, so without the
 manifest a middle piece would be placed at the beginning.
@@ -158,6 +166,16 @@ entera. Las piezas se solapan un poco (2 s por defecto) porque un decodificador
 necesita un momento para enganchar el sync al arrancar en frío; `merge` recorta
 ese sobrante.
 
+Si la captura registra su propia longitud en una etiqueta Vorbis
+`RF_TOTAL_SAMPLES` / `RF_SAMPLE_RATE` — las de MISRC y las del DomesDay
+Duplicator recientes lo hacen — `split` la lee y no hace falta `--total-samples`.
+Existen dos esquemas de etiquetas y distinguirlos importa: cuando
+`RF_SAMPLE_RATE` está por debajo de 1 MHz, ambos valores son los del encabezado
+"/1000" y hay que reescalarlos. Esa lectura sigue a
+[FLAC-Chop](https://github.com/harrypm/FLAC-Chop), que lo resolvió antes. Las
+capturas antiguas traen el bloque de comentarios vacío y siguen necesitando que
+se les indique la longitud.
+
 El manifiesto que escribe registra dónde cae cada pieza en la cinta. **Guárdalo**:
 un decode numera sus campos desde el principio de su propia entrada, así que sin
 el manifiesto una pieza del medio se colocaría al principio.
@@ -209,8 +227,10 @@ El sidecar se escribe al final: hasta entonces el fichero sigue cuadrando con su
 
 ---
 
-All the hard work is [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
-and [oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode). This fork only
+All the hard work is [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
+[oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode) and
+[harrypm/FLAC-Chop](https://github.com/harrypm/FLAC-Chop), whose reading of the
+RF Vorbis tags this borrows. This fork only
 lets more than one machine help.
 
 **by ElMamadoJoe**

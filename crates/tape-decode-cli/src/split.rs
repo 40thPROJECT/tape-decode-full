@@ -115,6 +115,85 @@ fn read_coded_number(data: &[u8]) -> Option<(u64, usize)> {
     Some((value, len))
 }
 
+/// The capture's true length, as recorded by the tool that captured it.
+///
+/// MISRC and the DomesDay Duplicator write these into the FLAC's Vorbis comment,
+/// which is the only place a long RF capture can state its length honestly - the
+/// STREAMINFO count is 36 bits and a placeholder in practice.
+///
+/// There are two schemas in the wild, and telling them apart matters.  In the
+/// early one `RF_SAMPLE_RATE` holds the "/1000" header value (20000 for 20 MSPS)
+/// and `RF_TOTAL_SAMPLES` is a count *at that rate*, so both need scaling by
+/// 1000 to reach on-disk units.  In the later one both are real.  A rate below
+/// 1 MHz means the early schema.  This reading of the tags follows
+/// <https://github.com/harrypm/FLAC-Chop>, which worked it out first.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct RfTags {
+    /// On-disk sample count, already rescaled out of whichever schema was used.
+    pub(crate) total_samples: Option<u64>,
+    /// Real sample rate in Hz.
+    pub(crate) sample_rate_hz: Option<f64>,
+}
+
+fn parse_rf_tags(body: &[u8]) -> RfTags {
+    let mut out = RfTags::default();
+    let read_u32 = |b: &[u8], at: usize| -> Option<u32> {
+        b.get(at..at + 4)
+            .map(|s| u32::from_le_bytes(s.try_into().unwrap()))
+    };
+    let mut off = 0usize;
+    let vendor_len = match read_u32(body, off) {
+        Some(n) => n as usize,
+        None => return out,
+    };
+    off += 4 + vendor_len;
+    let count = match read_u32(body, off) {
+        Some(n) => n as usize,
+        None => return out,
+    };
+    off += 4;
+
+    let (mut tag_total, mut tag_rate, mut tag_duration) = (None, None, None);
+    for _ in 0..count {
+        let len = match read_u32(body, off) {
+            Some(n) => n as usize,
+            None => break,
+        };
+        off += 4;
+        let Some(raw) = body.get(off..off + len) else {
+            break;
+        };
+        off += len;
+        let Ok(text) = std::str::from_utf8(raw) else {
+            continue;
+        };
+        let Some((key, value)) = text.split_once('=') else {
+            continue;
+        };
+        match key.to_ascii_uppercase().as_str() {
+            "RF_TOTAL_SAMPLES" => tag_total = value.trim().parse::<u64>().ok(),
+            "RF_SAMPLE_RATE" => tag_rate = value.trim().parse::<f64>().ok(),
+            "DURATION_SECONDS" => tag_duration = value.trim().parse::<f64>().ok(),
+            _ => {}
+        }
+    }
+
+    // A rate below 1 MHz is the "/1000" schema; scale both back to real units.
+    let scale = match tag_rate {
+        Some(r) if r > 0.0 && r < 1.0e6 => 1000.0,
+        _ => 1.0,
+    };
+    out.sample_rate_hz = tag_rate.map(|r| r * scale);
+    out.total_samples = tag_total
+        .map(|n| (n as f64 * scale) as u64)
+        // DURATION_SECONDS is a float and rounds, so it is only a fallback.
+        .or_else(|| match (tag_duration, out.sample_rate_hz) {
+            (Some(secs), Some(rate)) => Some((secs * rate) as u64),
+            _ => None,
+        });
+    out
+}
+
 /// The parts of STREAMINFO this needs, plus where the frames begin.
 struct FlacInfo {
     /// Metadata headers verbatim, reused at the front of every piece.
@@ -123,6 +202,7 @@ struct FlacInfo {
     blocksize: u64,
     max_framesize: u64,
     size: u64,
+    tags: RfTags,
 }
 
 impl FlacInfo {
@@ -138,6 +218,7 @@ impl FlacInfo {
         let mut pos: u64 = 4;
         let mut blocksize = 0u64;
         let mut max_framesize = 0u64;
+        let mut tags = RfTags::default();
         loop {
             let mut head = [0u8; 4];
             file.read_exact(&mut head).context("truncated metadata")?;
@@ -161,6 +242,8 @@ impl FlacInfo {
                 }
                 blocksize = min_bs;
                 max_framesize = u64::from(u32::from_be_bytes([0, body[7], body[8], body[9]]));
+            } else if block_type == 4 {
+                tags = parse_rf_tags(&body);
             }
             pos += 4 + length as u64;
             if is_last {
@@ -187,6 +270,7 @@ impl FlacInfo {
                 blocksize * 4 + 16
             },
             size,
+            tags,
         })
     }
 
@@ -552,6 +636,11 @@ fn plan_raw(
 
 // -- running ---------------------------------------------------------------
 
+/// The capture's length as its own metadata records it, if it does.
+pub(crate) fn rf_tags(path: &Path) -> Option<RfTags> {
+    FlacInfo::read(path).ok().map(|info| info.tags)
+}
+
 pub(crate) struct SplitRequest<'a> {
     pub(crate) input: &'a Path,
     pub(crate) out_dir: &'a Path,
@@ -636,6 +725,60 @@ pub(crate) fn run(req: SplitRequest<'_>, mut progress: impl FnMut(u64, u64)) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a VORBIS_COMMENT body with the given `KEY=value` entries.
+    fn vorbis_body(tags: &[&str]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let vendor = b"test";
+        out.extend((vendor.len() as u32).to_le_bytes());
+        out.extend(vendor);
+        out.extend((tags.len() as u32).to_le_bytes());
+        for tag in tags {
+            out.extend((tag.len() as u32).to_le_bytes());
+            out.extend(tag.as_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn rf_tags_later_schema_is_taken_as_is() {
+        let tags = parse_rf_tags(&vorbis_body(&[
+            "RF_SAMPLE_RATE=20000000",
+            "RF_TOTAL_SAMPLES=88079600000",
+            "DURATION_SECONDS=4403.980000",
+        ]));
+        assert_eq!(tags.total_samples, Some(88_079_600_000));
+        assert_eq!(tags.sample_rate_hz, Some(20_000_000.0));
+    }
+
+    #[test]
+    fn rf_tags_early_schema_is_rescaled_by_1000() {
+        // RF_SAMPLE_RATE below 1 MHz means both values are the "/1000" ones.
+        let tags = parse_rf_tags(&vorbis_body(&[
+            "RF_SAMPLE_RATE=20000",
+            "RF_TOTAL_SAMPLES=88079600",
+            "DURATION_SECONDS=4403.980000",
+        ]));
+        assert_eq!(tags.total_samples, Some(88_079_600_000));
+        assert_eq!(tags.sample_rate_hz, Some(20_000_000.0));
+    }
+
+    #[test]
+    fn rf_tags_fall_back_to_duration() {
+        let tags = parse_rf_tags(&vorbis_body(&[
+            "RF_SAMPLE_RATE=40000",
+            "DURATION_SECONDS=100.0",
+        ]));
+        assert_eq!(tags.total_samples, Some(4_000_000_000));
+    }
+
+    #[test]
+    fn rf_tags_absent_yields_nothing() {
+        let tags = parse_rf_tags(&vorbis_body(&["TITLE=whatever"]));
+        assert_eq!(tags.total_samples, None);
+        // An empty comment block, as FlaLDF writes, must not panic either.
+        assert_eq!(parse_rf_tags(&vorbis_body(&[])).total_samples, None);
+    }
 
     #[test]
     fn crc8_matches_known_frame_header() {
