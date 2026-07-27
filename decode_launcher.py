@@ -69,7 +69,7 @@ try:
         QWidget,
     )
 except ImportError as exc:
-    raise SystemExit("PyQt6 is required for Decode Launcher.") from exc
+    raise SystemExit("PyQt6 is required for Tape Decode Full.") from exc
 
 
 ALIGN_TOP = Qt.AlignmentFlag.AlignTop
@@ -84,27 +84,27 @@ class ToolSpec:
 
 TOOLS = [
     ToolSpec(
-        label="tape-decode-rust-fast decode (guided)",
+        label="tape-decode-full decode (guided)",
         subcommand="decode",
         notes="Builds a decode command from the form fields and launches it in a terminal.",
     ),
     ToolSpec(
-        label="tape-decode-rust-fast list-profiles (terminal)",
+        label="tape-decode-full list-profiles (terminal)",
         subcommand="list-profiles",
         notes="Runs list-profiles; optional flags can be added in Extra arguments.",
     ),
     ToolSpec(
-        label="tape-decode-rust-fast compare (terminal)",
+        label="tape-decode-full compare (terminal)",
         subcommand="compare",
         notes="Runs compare; provide required compare arguments in Extra arguments.",
     ),
     ToolSpec(
-        label="tape-decode-rust-fast write-profile (terminal)",
+        label="tape-decode-full write-profile (terminal)",
         subcommand="write-profile",
         notes="Runs write-profile; provide required arguments in Extra arguments.",
     ),
     ToolSpec(
-        label="tape-decode-rust-fast split (terminal)",
+        label="tape-decode-full split (terminal)",
         subcommand="split",
         notes=(
             "Cuts a capture into standalone pieces to decode on other machines. "
@@ -114,7 +114,7 @@ TOOLS = [
         ),
     ),
     ToolSpec(
-        label="tape-decode-rust-fast merge (terminal)",
+        label="tape-decode-full merge (terminal)",
         subcommand="merge",
         notes=(
             "Joins .tbc decodes that follow on from each other, in tape order, "
@@ -122,7 +122,7 @@ TOOLS = [
         ),
     ),
     ToolSpec(
-        label="tape-decode-rust-fast insert (terminal)",
+        label="tape-decode-full insert (terminal)",
         subcommand="insert",
         notes=(
             "Fills a gap in the middle of a finished decode, for when one "
@@ -448,7 +448,7 @@ class DecodeLauncherWindow(QWidget):
     def __init__(self):
         super().__init__()
         self._tools = TOOLS
-        self.setWindowTitle("Decode Launcher")
+        self.setWindowTitle("Tape Decode Full")
         self.resize(860, 360)
 
         self.tool_combo = QComboBox()
@@ -793,11 +793,12 @@ class DecodeLauncherWindow(QWidget):
                 self.input_format_combo.currentText().strip().lower() == "flac"
                 and capture
                 and Path(capture).is_file()
-                and self._flac_length(capture) is None
+                and self._capture_length(capture)[0] is None
             ):
                 problems.append(
-                    "This capture does not record its own length, so it cannot be "
-                    "split automatically. Enter the length in samples or seconds."
+                    "Neither this capture nor a .json beside it records its "
+                    "length, so it cannot be split automatically. Enter the "
+                    "length in samples or seconds."
                 )
 
         elif sub == "merge":
@@ -853,6 +854,28 @@ class DecodeLauncherWindow(QWidget):
         except Exception:
             return None
 
+    def _capture_length(self, path: str):
+        """Sample count and where it came from, or (None, None).
+
+        The two capture tools record it in different places: MISRC writes RF
+        Vorbis tags inside the FLAC, the DomesDay Duplicator writes a .json
+        sidecar beside it.  Both are worth reading.
+        """
+        tagged = self._flac_length(path)
+        if tagged:
+            return tagged, "the capture's own tags"
+        try:
+            sidecar = Path(path).with_suffix(".json")
+            with open(sidecar, encoding="utf-8") as handle:
+                info = json.load(handle).get("captureInfo") or {}
+            ms = float(info.get("durationInMilliseconds") or 0)
+            rate = float(self.frequency_edit.text() or 40) * 1e6
+            if ms > 0 and rate > 0:
+                return int(ms / 1000.0 * rate), sidecar.name
+        except Exception:
+            pass
+        return None, None
+
     @staticmethod
     def _flac_length(path: str):
         """Sample count from the capture's own RF tags, if it carries them."""
@@ -881,16 +904,19 @@ class DecodeLauncherWindow(QWidget):
         if sub == "split":
             capture = self.input_edit.text().strip()
             if capture and Path(capture).is_file():
-                total = self._flac_length(capture)
+                total, source = self._capture_length(capture)
                 if total:
                     rate = float(self.frequency_edit.text() or 40) * 1e6
                     secs = total / rate if rate else 0
                     each = secs / max(1, self.parts_spin.value())
                     return (
-                        f"Detected {total:,} samples ({secs / 60:.0f} min) from the "
-                        f"capture's own tags. Each piece is about {each / 60:.0f} min."
+                        f"Detected {total:,} samples ({secs / 60:.0f} min) from "
+                        f"{source}. Each piece is about {each / 60:.0f} min."
                     )
-                return "This capture does not record its own length; state it below."
+                return (
+                    "Neither this capture nor a .json beside it records its "
+                    "length; state it below."
+                )
             return ""
         if sub == "merge":
             paths = self._tbc_paths()
@@ -1142,7 +1168,7 @@ class DecodeLauncherWindow(QWidget):
             extra_args = _split_user_args(extra, strict=strict)
             if _arg_writes_raw_output_to_stdout(extra_args):
                 raise RuntimeError(
-                    "Decode Launcher cannot use --luma-out - / --chroma-out - in Extra arguments. "
+                    "Tape Decode Full cannot use --luma-out - / --chroma-out - in Extra arguments. "
                     "Use Output base file paths in the form, or run a manual shell pipeline outside launcher."
                 )
             args += extra_args
@@ -1539,7 +1565,7 @@ def _apply_fusion_dark_mode(app: QApplication) -> None:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Decode Launcher (Qt) for running tape-decode commands"
+        description="Tape Decode Full (Qt) for running tape-decode-full commands"
     )
     parser.parse_args(argv)
 

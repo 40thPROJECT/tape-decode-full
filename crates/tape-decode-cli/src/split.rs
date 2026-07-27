@@ -641,6 +641,27 @@ pub(crate) fn rf_tags(path: &Path) -> Option<RfTags> {
     FlacInfo::read(path).ok().map(|info| info.tags)
 }
 
+/// Sample count from a capture tool's `.json` sidecar, if there is one.
+///
+/// The two capture tools record the length in different places: MISRC writes RF
+/// Vorbis tags inside the FLAC, while the DomesDay Duplicator writes
+/// `<capture>.json` beside it with `captureInfo.durationInMilliseconds`.  Both
+/// are worth reading, because a capture carrying neither cannot be split without
+/// the length being stated by hand.
+pub(crate) fn sidecar_samples(path: &Path, sample_rate_hz: f64) -> Option<u64> {
+    let json_path = path.with_extension("json");
+    let text = std::fs::read_to_string(json_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let ms = value
+        .get("captureInfo")?
+        .get("durationInMilliseconds")?
+        .as_f64()?;
+    if ms <= 0.0 || sample_rate_hz <= 0.0 {
+        return None;
+    }
+    Some((ms / 1000.0 * sample_rate_hz) as u64)
+}
+
 pub(crate) struct SplitRequest<'a> {
     pub(crate) input: &'a Path,
     pub(crate) out_dir: &'a Path,

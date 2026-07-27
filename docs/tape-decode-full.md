@@ -1,4 +1,4 @@
-# tape-decode-rust-fast
+# tape-decode-full
 
 **[English](#english) · [Español](#español)**
 
@@ -20,14 +20,14 @@ These three subcommands split that work across machines:
 
 ```bash
 # 1. cut the capture into standalone pieces
-tape-decode-rust-fast split capture.ldf pieces/ --parts 4
+tape-decode-full split capture.ldf pieces/ --parts 4
 
 # 2. decode a piece on each machine, however you like
-tape-decode-rust-fast decode --profile NTSC_VHS --input-format flac \
+tape-decode-full decode --profile NTSC_VHS --input-format flac \
     pieces/capture.part00.ldf --output out
 
 # 3. bring the .tbc files back and join them, in tape order
-tape-decode-rust-fast merge pc1.tbc pc2.tbc pc3.tbc pc4.tbc \
+tape-decode-full merge pc1.tbc pc2.tbc pc3.tbc pc4.tbc \
     -o tape -m pieces/capture.parts.json
 ```
 
@@ -86,7 +86,7 @@ If one machine's piece fails part-way, its stretch is missing from the middle of
 the merged output. Decode that stretch again and `insert` drops it into the hole:
 
 ```bash
-tape-decode-rust-fast insert --into tape.tbc --insert gap.tbc --dry-run
+tape-decode-full insert --into tape.tbc --insert gap.tbc --dry-run
 ```
 
 It works in place - extending the file and shifting the tail along, backwards
@@ -128,14 +128,14 @@ Estos tres subcomandos reparten ese trabajo:
 
 ```bash
 # 1. cortar la captura en piezas autónomas
-tape-decode-rust-fast split captura.ldf piezas/ --parts 4
+tape-decode-full split captura.ldf piezas/ --parts 4
 
 # 2. decodificar una pieza en cada máquina, como prefieras
-tape-decode-rust-fast decode --profile NTSC_VHS --input-format flac \
+tape-decode-full decode --profile NTSC_VHS --input-format flac \
     piezas/captura.part00.ldf --output salida
 
 # 3. traer los .tbc y unirlos, en orden de cinta
-tape-decode-rust-fast merge pc1.tbc pc2.tbc pc3.tbc pc4.tbc \
+tape-decode-full merge pc1.tbc pc2.tbc pc3.tbc pc4.tbc \
     -o cinta -m piezas/captura.parts.json
 ```
 
@@ -199,7 +199,7 @@ Si la pieza de una máquina falla a medias, su tramo falta en mitad del resultad
 unido. Decodificas ese tramo otra vez e `insert` lo mete en el hueco:
 
 ```bash
-tape-decode-rust-fast insert --into cinta.tbc --insert hueco.tbc --dry-run
+tape-decode-full insert --into cinta.tbc --insert hueco.tbc --dry-run
 ```
 
 Trabaja en el propio fichero — lo alarga y desplaza la cola hacia atrás desde su

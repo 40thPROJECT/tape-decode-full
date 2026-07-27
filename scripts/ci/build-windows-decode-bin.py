@@ -15,7 +15,7 @@ _TRIPLES: tuple[str, ...] = ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"
 
 
 def _binary_name() -> str:
-    return "tape-decode-rust-fast.exe" if os.name == "nt" else "tape-decode-rust-fast"
+    return "tape-decode-full.exe" if os.name == "nt" else "tape-decode-full"
 
 
 def _platform_sep() -> str:
@@ -40,15 +40,15 @@ def _resolve_tape_decode_bin() -> Path:
                 return p.resolve()
     # Legacy single-build locations and generic target/
     candidates = [
-        Path(r"target\x86_64-pc-windows-msvc\release\tape-decode-rust-fast.exe"),
-        Path(r"target\aarch64-pc-windows-msvc\release\tape-decode-rust-fast.exe"),
-        Path(r"target\release\tape-decode-rust-fast.exe"),
+        Path(r"target\x86_64-pc-windows-msvc\release\tape-decode-full.exe"),
+        Path(r"target\aarch64-pc-windows-msvc\release\tape-decode-full.exe"),
+        Path(r"target\release\tape-decode-full.exe"),
     ]
     for candidate in candidates:
         if candidate and candidate.is_file():
             return candidate.resolve()
     raise FileNotFoundError(
-        "Could not find tape-decode-rust-fast.exe. Build it before running this packaging script."
+        "Could not find tape-decode-full.exe. Build it before running this packaging script."
     )
 
 
@@ -95,9 +95,13 @@ def main() -> None:
         f"resources\\icon\\tape-decode-rust-256.png;decode-rust-gui.png",
         "--icon",
         "resources\\icon\\tape-decode-rust.ico",
+        # A GUI app should not sit behind a console window.  The tools it
+        # launches still open their own terminal; this only removes the
+        # bootloader console.
+        "--noconsole",
         "--onefile",
         "--name",
-        "tape-decode-rust-fast-gui",
+        "tape-decode-full-gui",
     ]
 
     for src, dest in _discover_level_binaries():

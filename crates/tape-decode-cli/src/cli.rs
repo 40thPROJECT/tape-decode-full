@@ -92,7 +92,7 @@ impl From<CliSampleFormat> for SampleFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "tape-decode-rust-fast")]
+#[command(name = "tape-decode-full")]
 #[command(
     about = "Extracts video from RAW RF captures of colour-under & composite modulated tapes"
 )]
@@ -453,13 +453,21 @@ fn run_split(cli: SplitArgs) -> Result<()> {
     let total_samples = match (cli.total_samples, cli.duration) {
         (Some(n), _) => n,
         (None, Some(secs)) => (secs * sample_rate_hz) as u64,
-        (None, None) => match split::rf_tags(&cli.input).and_then(|t| t.total_samples) {
-            Some(n) => {
-                eprintln!("using the capture's own RF_TOTAL_SAMPLES tag: {n} samples");
-                n
+        (None, None) => {
+            let tagged = split::rf_tags(&cli.input).and_then(|t| t.total_samples);
+            let sidecar = split::sidecar_samples(&cli.input, sample_rate_hz);
+            match (tagged, sidecar) {
+                (Some(n), _) => {
+                    eprintln!("using the capture's own RF_TOTAL_SAMPLES tag: {n} samples");
+                    n
+                }
+                (None, Some(n)) => {
+                    eprintln!("using the capture tool's .json sidecar: {n} samples");
+                    n
+                }
+                (None, None) => capture_samples(&cli.input, format)?,
             }
-            None => capture_samples(&cli.input, format)?,
-        },
+        }
     };
 
     let mut last = 0u64;
