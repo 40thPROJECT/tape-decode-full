@@ -474,7 +474,12 @@ fn plan_cuts(total: u64, parts: u64, overlap: u64) -> (Vec<(u64, Option<u64>)>, 
     (cuts, capped)
 }
 
-fn plan_flac(path: &Path, stem: &str, cuts: &[(u64, Option<u64>)]) -> Result<Vec<Piece>> {
+fn plan_flac(
+    path: &Path,
+    stem: &str,
+    cuts: &[(u64, Option<u64>)],
+    total_samples: u64,
+) -> Result<Vec<Piece>> {
     let info = FlacInfo::read(path)?;
     let mut file = File::open(path)?;
     let base = info.base_sample(&mut file)?;
@@ -493,15 +498,11 @@ fn plan_flac(path: &Path, stem: &str, cuts: &[(u64, Option<u64>)]) -> Result<Vec
                 (b, end_sample.saturating_sub(first_sample))
             }
             None => {
-                // Runs to EOF; estimate the span from the bytes, only to stamp
-                // the header.
-                let seen = byte_start.saturating_sub(info.first_frame_offset);
-                let span = if seen > 0 {
-                    ((info.size - byte_start) as f64 * (first_sample as f64 / seen as f64)) as u64
-                } else {
-                    0
-                };
-                (info.size, span)
+                // Runs to EOF, so its length is the capture's length less where
+                // it starts.  That is exact, and it matters: the span is stamped
+                // into the piece's header, and a file claiming more samples than
+                // it holds is the failure mode this module exists to avoid.
+                (info.size, total_samples.saturating_sub(first_sample))
             }
         };
         pieces.push(Piece {
@@ -573,7 +574,7 @@ pub(crate) fn run(req: SplitRequest<'_>, mut progress: impl FnMut(u64, u64)) -> 
 
     let (cuts, overlap) = plan_cuts(req.total_samples, req.parts, req.overlap_samples);
     let pieces = match req.format {
-        SampleFormat::Flac => plan_flac(req.input, &stem, &cuts)?,
+        SampleFormat::Flac => plan_flac(req.input, &stem, &cuts, req.total_samples)?,
         other => plan_raw(req.input, &stem, other, &cuts)?,
     };
 
