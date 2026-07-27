@@ -79,24 +79,52 @@ class ToolSpec:
 
 TOOLS = [
     ToolSpec(
-        label="tape-decode decode (guided)",
+        label="tape-decode-fast decode (guided)",
         subcommand="decode",
         notes="Builds a decode command from the form fields and launches it in a terminal.",
     ),
     ToolSpec(
-        label="tape-decode list-profiles (terminal)",
+        label="tape-decode-fast list-profiles (terminal)",
         subcommand="list-profiles",
         notes="Runs list-profiles; optional flags can be added in Extra arguments.",
     ),
     ToolSpec(
-        label="tape-decode compare (terminal)",
+        label="tape-decode-fast compare (terminal)",
         subcommand="compare",
         notes="Runs compare; provide required compare arguments in Extra arguments.",
     ),
     ToolSpec(
-        label="tape-decode write-profile (terminal)",
+        label="tape-decode-fast write-profile (terminal)",
         subcommand="write-profile",
         notes="Runs write-profile; provide required arguments in Extra arguments.",
+    ),
+    ToolSpec(
+        label="tape-decode-fast split (terminal)",
+        subcommand="split",
+        notes=(
+            "Cuts a capture into standalone pieces to decode on other machines. "
+            "Give the capture and an output directory, e.g. "
+            "capture.ldf pieces/ --parts 4. Keep the .parts.json it writes: "
+            "merge needs it to know where each decode belongs."
+        ),
+    ),
+    ToolSpec(
+        label="tape-decode-fast merge (terminal)",
+        subcommand="merge",
+        notes=(
+            "Joins .tbc decodes that follow on from each other, in tape order, "
+            "e.g. pc1.tbc pc2.tbc -o tape -m pieces/capture.parts.json."
+        ),
+    ),
+    ToolSpec(
+        label="tape-decode-fast insert (terminal)",
+        subcommand="insert",
+        notes=(
+            "Fills a gap in the middle of a finished decode, for when one "
+            "machine's piece had to be decoded again, e.g. "
+            "--into tape.tbc --insert gap.tbc. Rewrites the file in place; "
+            "run it with --dry-run first."
+        ),
     ),
 ]
 

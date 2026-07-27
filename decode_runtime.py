@@ -67,7 +67,7 @@ def _binary_seems_runnable(p: Path, timeout_seconds: float = 4.0) -> bool:
 
 
 def _binary_name() -> str:
-    return "tape-decode.exe" if os.name == "nt" else "tape-decode"
+    return "tape-decode-fast.exe" if os.name == "nt" else "tape-decode-fast"
 
 
 def _repo_root() -> Path:
@@ -226,16 +226,21 @@ def resolve_tape_decode_prefix(level: str = MICROARCH_AUTO) -> list[str]:
             # continue to lower level for Auto
             continue
 
-    on_path = shutil.which(_binary_name()) or shutil.which("tape-decode")
+    on_path = (
+        shutil.which(_binary_name())
+        # Accept the upstream name too, so an existing build still works.
+        or shutil.which("tape-decode.exe" if os.name == "nt" else "tape-decode")
+        or shutil.which("tape-decode")
+    )
     if on_path:
         return [on_path]
 
     repo_root = _repo_root()
     if (repo_root / "Cargo.toml").is_file() and shutil.which("cargo"):
-        return ["cargo", "run", "--release", "--bin", "tape-decode", "--"]
+        return ["cargo", "run", "--release", "--bin", "tape-decode-fast", "--"]
 
     raise FileNotFoundError(
-        "Could not locate tape-decode binary. Build it first or add it to PATH."
+        "Could not locate the tape-decode-fast binary. Build it first or add it to PATH."
     )
 
 

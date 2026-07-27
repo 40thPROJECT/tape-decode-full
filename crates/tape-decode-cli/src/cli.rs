@@ -9,12 +9,14 @@ use std::sync::Arc;
 use anyhow::{bail, Context as _, Result};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 
+use crate::assemble;
 use crate::decode::{decode_all, decode_all_mt, MtParams};
 use crate::fields_match::{f32_msre, wrapped_u16_msre};
 use crate::metadata::{PcmAudioParameters, TbcMetadataFull, VideoParameters};
 use crate::os;
 use crate::profiles::{flatten_profile, load_profile, load_profile_file, profile_names};
 use crate::reader::{open_source, DecodeReader, SampleFormat};
+use crate::split;
 use crate::writer::DecodeWriter;
 use tape_decode::{
     DecodeRequest, DecoderSpec, DropOuts, FieldInfoEntry, FieldOrderAction, NotchFilter,
@@ -90,7 +92,7 @@ impl From<CliSampleFormat> for SampleFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "tape-decode")]
+#[command(name = "tape-decode-fast")]
 #[command(
     about = "Extracts video from RAW RF captures of colour-under & composite modulated tapes"
 )]
@@ -109,6 +111,73 @@ enum Command {
     ListProfiles(ListProfilesArgs),
     /// Compare two decode outputs.
     Compare(CompareArgs),
+    /// Cut an RF capture into standalone pieces, to decode on several machines.
+    Split(SplitArgs),
+    /// Join .tbc decodes that follow on from each other.
+    Merge(MergeArgs),
+    /// Fill a gap in the middle of a finished decode.
+    Insert(InsertArgs),
+}
+
+#[derive(Args, Debug)]
+struct SplitArgs {
+    /// Capture to split.
+    input: PathBuf,
+    /// Directory to write the pieces and the manifest into.
+    output_dir: PathBuf,
+    /// Number of pieces.
+    #[arg(long, default_value_t = 2)]
+    parts: u64,
+    /// Input format.
+    #[arg(long, value_enum, ignore_case = true, default_value = "flac")]
+    input_format: CliSampleFormat,
+    /// Input RF sample rate in MHz; Hz, kHz, MHz, M, and k suffixes are accepted.
+    #[arg(long, value_parser = parse_frequency, default_value = "40")]
+    frequency: f64,
+    /// Seconds of tape each piece repeats from the one before, so a decoder has
+    /// lead-in to lock sync. `merge` trims it back out.
+    #[arg(long, default_value_t = 2.0)]
+    overlap: f64,
+    /// Capture length in samples, when it cannot be read from the file itself.
+    #[arg(long)]
+    total_samples: Option<u64>,
+    /// Capture length in seconds, same purpose.
+    #[arg(long)]
+    duration: Option<f64>,
+}
+
+#[derive(Args, Debug)]
+struct MergeArgs {
+    /// The .tbc decodes, in tape order.
+    tbc: Vec<PathBuf>,
+    /// Output base name; writes <name>.tbc, _chroma.tbc and .tbc.json.
+    #[arg(long, short)]
+    output: PathBuf,
+    /// The .parts.json written by `split`, which says where each decode belongs.
+    #[arg(long, short)]
+    manifest: Option<PathBuf>,
+    /// Allow overwriting outputs.
+    #[arg(long)]
+    overwrite: bool,
+}
+
+#[derive(Args, Debug)]
+struct InsertArgs {
+    /// The .tbc with the gap. Rewritten in place.
+    #[arg(long)]
+    into: PathBuf,
+    /// The .tbc to drop into it.
+    #[arg(long)]
+    insert: PathBuf,
+    /// Input RF sample rate in MHz.
+    #[arg(long, value_parser = parse_frequency, default_value = "40")]
+    frequency: f64,
+    /// Frame rate, used only to size what counts as a gap.
+    #[arg(long, default_value_t = 30000.0 / 1001.0)]
+    fps: f64,
+    /// Report what would happen and stop.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -352,7 +421,197 @@ pub fn run_cli() -> Result<()> {
         Command::WriteProfile(args) => run_write_profile(args),
         Command::ListProfiles(args) => run_list_profiles(args),
         Command::Compare(args) => run_compare(args),
+        Command::Split(args) => run_split(args),
+        Command::Merge(args) => run_merge(args),
+        Command::Insert(args) => run_insert(args),
     }
+}
+
+/// Total samples in a capture, when the caller did not state it.
+///
+/// Raw formats are exact from the file size.  FLAC is not: a capture past 2^36
+/// samples cannot record its own length in a FLAC header, and a container's
+/// claim is worth cross-checking - compressed audio is never larger than the
+/// samples it encodes.  Rather than guess, ask.
+fn capture_samples(path: &Path, format: SampleFormat) -> Result<u64> {
+    let size = std::fs::metadata(path)?.len();
+    let per_sample: u64 = match format {
+        SampleFormat::U8 | SampleFormat::S8 => 1,
+        SampleFormat::S16LE | SampleFormat::U16LE => 2,
+        SampleFormat::F32LE => 4,
+        SampleFormat::Flac => bail!(
+            "cannot tell how long a FLAC capture is from the file alone; pass \
+             --total-samples or --duration"
+        ),
+    };
+    Ok(size / per_sample)
+}
+
+fn run_split(cli: SplitArgs) -> Result<()> {
+    let format: SampleFormat = cli.input_format.into();
+    let sample_rate_hz = cli.frequency * 1e6;
+    let total_samples = match (cli.total_samples, cli.duration) {
+        (Some(n), _) => n,
+        (None, Some(secs)) => (secs * sample_rate_hz) as u64,
+        (None, None) => capture_samples(&cli.input, format)?,
+    };
+
+    let mut last = 0u64;
+    let manifest = split::run(
+        split::SplitRequest {
+            input: &cli.input,
+            out_dir: &cli.output_dir,
+            format,
+            parts: cli.parts,
+            overlap_samples: (cli.overlap * sample_rate_hz) as u64,
+            total_samples,
+        },
+        |done, total| {
+            // One line per 5%, so a log file does not fill with a progress bar.
+            let step = total / 20;
+            if step > 0 && done - last >= step {
+                last = done;
+                eprintln!(
+                    "  {:.0}% ({:.1} of {:.1} GB)",
+                    100.0 * done as f64 / total as f64,
+                    done as f64 / 1e9,
+                    total as f64 / 1e9
+                );
+            }
+        },
+    )?;
+
+    let stem = cli
+        .input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("capture");
+    let manifest_path = cli.output_dir.join(format!("{stem}.parts.json"));
+    serde_json::to_writer_pretty(File::create(&manifest_path)?, &manifest)?;
+
+    println!("Wrote {} piece(s):", manifest.parts.len());
+    for piece in &manifest.parts {
+        println!(
+            "  {:<40} {:>8.1} GB   from {:.1} s of tape",
+            piece.file,
+            piece.bytes as f64 / 1e9,
+            piece.start_sample as f64 / sample_rate_hz
+        );
+    }
+    println!("\nManifest: {}", manifest_path.display());
+    println!("Keep it - `merge` needs it to know where each decode belongs.");
+    Ok(())
+}
+
+fn run_merge(cli: MergeArgs) -> Result<()> {
+    if cli.tbc.is_empty() {
+        bail!("no .tbc files given");
+    }
+    let manifest: Option<split::Manifest> = match cli.manifest.as_deref() {
+        Some(path) => Some(serde_json::from_reader(File::open(path)?)?),
+        None => None,
+    };
+    if let Some(m) = &manifest {
+        if m.parts.len() != cli.tbc.len() {
+            bail!(
+                "the manifest describes {} piece(s) but {} .tbc file(s) were given; \
+                 they are matched up in order, so there must be one for each",
+                m.parts.len(),
+                cli.tbc.len()
+            );
+        }
+    }
+
+    for suffix in [".tbc", "_chroma.tbc", ".tbc.json"] {
+        let mut path = cli.output.as_os_str().to_os_string();
+        path.push(suffix);
+        let path = PathBuf::from(path);
+        if path.exists() && !cli.overwrite {
+            bail!("{} exists; pass --overwrite", path.display());
+        }
+    }
+
+    let parts = cli
+        .tbc
+        .iter()
+        .enumerate()
+        .map(|(i, path)| {
+            let origin = manifest.as_ref().map_or(0, |m| m.parts[i].start_sample);
+            let label = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            assemble::Part::load(path, origin, label)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    // Placing pieces out of order would silently interleave the tape.
+    let starts: Vec<u64> = parts
+        .iter()
+        .filter_map(|p| p.locs().first().copied())
+        .collect();
+    if starts.windows(2).any(|w| w[1] < w[0]) {
+        bail!("these decodes are not in tape order; pass them earliest first");
+    }
+
+    let outcome = assemble::merge(
+        &parts,
+        &cli.output,
+        |msg| eprintln!("  warning: {msg}"),
+        |_| {},
+    )?;
+    println!(
+        "Wrote {} fields ({:.0} frames) to {}.tbc",
+        outcome.fields,
+        outcome.fields as f64 / 2.0,
+        cli.output.display()
+    );
+    if outcome.dropped_parity > 0 {
+        println!(
+            "Dropped {} field(s) at the joins to keep field order alternating.",
+            outcome.dropped_parity
+        );
+    }
+    Ok(())
+}
+
+fn run_insert(cli: InsertArgs) -> Result<()> {
+    let sample_rate_hz = cli.frequency * 1e6;
+    let samples_per_field = sample_rate_hz / (cli.fps * 2.0);
+
+    let target = assemble::Part::load(&cli.into, 0, "target".into())?;
+    let insert = assemble::Part::load(&cli.insert, 0, "insert".into())?;
+    let plan = assemble::plan_insert(&target, &insert, samples_per_field, |m| eprintln!("  {m}"))?;
+
+    println!(
+        "Inserting {} fields ({:.0} frames, {:.1} s of tape) at position {} of {}",
+        plan.keep.len(),
+        plan.keep.len() as f64 / 2.0,
+        plan.keep.len() as f64 * samples_per_field / sample_rate_hz,
+        plan.at,
+        target.meta.fields.len()
+    );
+    println!(
+        "  gap in the target : {:.1} s .. {:.1} s of tape",
+        plan.gap_start as f64 / sample_rate_hz,
+        plan.gap_end as f64 / sample_rate_hz
+    );
+    if cli.dry_run {
+        println!("dry run, nothing written");
+        return Ok(());
+    }
+
+    let mut last_pct = 0u64;
+    let total = assemble::insert(&target, &insert, &plan, |what, done, all| {
+        let pct = if all > 0 { done * 100 / all } else { 100 };
+        if pct >= last_pct + 10 {
+            last_pct = pct;
+            eprintln!("  {what}: shifting tail {pct}%");
+        }
+    })?;
+    println!("\nDone: {total} fields ({:.0} frames)", total as f64 / 2.0);
+    Ok(())
 }
 
 fn run_decode(cli: DecodeArgs) -> Result<()> {

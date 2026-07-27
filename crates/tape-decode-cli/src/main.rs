@@ -1,3 +1,4 @@
+mod assemble;
 mod cli;
 mod decode;
 mod fields_match;
@@ -6,6 +7,7 @@ mod metadata;
 mod os;
 mod profiles;
 mod reader;
+mod split;
 mod writer;
 
 fn main() {
