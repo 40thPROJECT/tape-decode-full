@@ -1,3 +1,15 @@
+# tape-decode-fast
+
+A fork of [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
+that adds `split`, `merge` and `insert`, so one tape can be decoded across
+several machines rather than only across the cores of one.
+See **[docs/tape-decode-fast.md](docs/tape-decode-fast.md)** (English and Spanish).
+
+Everything below is the upstream project's own documentation and still applies;
+the binary is named `tape-decode-fast`.
+
+---
+
 # tape-decode
 
 A decoder for analog tape formats, written in Rust. Ported from the [vhs-decode](https://github.com/oyvindln/vhs-decode) project, commit [fe3f6099](https://github.com/oyvindln/vhs-decode/commit/fe3f6099e9e6a77295f26585598f658f2d926bb4).
