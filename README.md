@@ -1,12 +1,12 @@
-# tape-decode-fast
+# tape-decode-rust-fast
 
 A fork of [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
 that adds `split`, `merge` and `insert`, so one tape can be decoded across
 several machines rather than only across the cores of one.
-See **[docs/tape-decode-fast.md](docs/tape-decode-fast.md)** (English and Spanish).
+See **[docs/tape-decode-rust-fast.md](docs/tape-decode-rust-fast.md)** (English and Spanish).
 
 Everything below is the upstream project's own documentation and still applies;
-the binary is named `tape-decode-fast`.
+the binary is named `tape-decode-rust-fast`.
 
 ---
 

@@ -92,7 +92,7 @@ impl From<CliSampleFormat> for SampleFormat {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "tape-decode-fast")]
+#[command(name = "tape-decode-rust-fast")]
 #[command(
     about = "Extracts video from RAW RF captures of colour-under & composite modulated tapes"
 )]
