@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import shutil
@@ -48,15 +49,19 @@ try:
     from PyQt6.QtGui import QColor, QIcon, QPalette
     from PyQt6.QtWidgets import (
         QApplication,
+        QButtonGroup,
         QCheckBox,
         QComboBox,
+        QDoubleSpinBox,
         QFileDialog,
         QGridLayout,
         QGroupBox,
         QHBoxLayout,
         QLabel,
         QLineEdit,
+        QListWidget,
         QMessageBox,
+        QRadioButton,
         QPushButton,
         QSpinBox,
         QStyleFactory,
@@ -136,6 +141,38 @@ DEFAULT_PROFILE = "PAL_VHS"
 MICROARCH_UI_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Auto (use host default)", MICROARCH_AUTO),
 ) + tuple((label, label) for label in MICROARCH_LEVELS)
+
+
+def _rf_total_samples(body: bytes):
+    """On-disk sample count from a FLAC VORBIS_COMMENT block, if it records one.
+
+    Two schemas exist: when RF_SAMPLE_RATE is below 1 MHz both it and
+    RF_TOTAL_SAMPLES are the "/1000" header values and need scaling by 1000.
+    Getting that backwards would be wrong by three orders of magnitude.
+    """
+    try:
+        off = 0
+        vendor = int.from_bytes(body[off:off + 4], "little")
+        off += 4 + vendor
+        count = int.from_bytes(body[off:off + 4], "little")
+        off += 4
+        tags = {}
+        for _ in range(count):
+            size = int.from_bytes(body[off:off + 4], "little")
+            off += 4
+            text = body[off:off + size].decode("utf-8", "replace")
+            off += size
+            key, _, value = text.partition("=")
+            tags[key.upper()] = value.strip()
+        rate = float(tags["RF_SAMPLE_RATE"]) if "RF_SAMPLE_RATE" in tags else None
+        scale = 1000.0 if rate and 0 < rate < 1.0e6 else 1.0
+        if "RF_TOTAL_SAMPLES" in tags:
+            return int(float(tags["RF_TOTAL_SAMPLES"]) * scale)
+        if "DURATION_SECONDS" in tags and rate:
+            return int(float(tags["DURATION_SECONDS"]) * rate * scale)
+    except Exception:
+        return None
+    return None
 
 
 def _split_user_args(extra_args: str, *, strict: bool = True) -> list[str]:
@@ -480,6 +517,66 @@ class DecodeLauncherWindow(QWidget):
         self.debug_check = QCheckBox("Enable debug logging (--debug)")
 
         self.extra_args_edit = QLineEdit("")
+
+        # -- split ------------------------------------------------------
+        self.parts_spin = QSpinBox()
+        self.parts_spin.setRange(1, 999)
+        self.parts_spin.setValue(2)
+        self.overlap_spin = QDoubleSpinBox()
+        self.overlap_spin.setRange(0.0, 600.0)
+        self.overlap_spin.setSingleStep(0.5)
+        self.overlap_spin.setDecimals(2)
+        self.overlap_spin.setValue(2.0)
+        # The three sources of the capture length are mutually exclusive, so a
+        # button group enforces that rather than leaving it to the user.
+        self.length_auto_radio = QRadioButton("Read from the file")
+        self.length_samples_radio = QRadioButton("Samples")
+        self.length_seconds_radio = QRadioButton("Seconds")
+        self.length_auto_radio.setChecked(True)
+        self.length_group = QButtonGroup(self)
+        for button in (
+            self.length_auto_radio,
+            self.length_samples_radio,
+            self.length_seconds_radio,
+        ):
+            self.length_group.addButton(button)
+        self.length_value_edit = QLineEdit("")
+        self.length_value_edit.setPlaceholderText("length")
+        self.split_info_label = QLabel("")
+        self.split_info_label.setWordWrap(True)
+
+        # -- merge ------------------------------------------------------
+        # Order is the semantics here: passed out of order the tape interleaves,
+        # so the list is explicit and reorderable rather than a text field.
+        self.tbc_list = QListWidget()
+        self.tbc_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.tbc_list.setMaximumHeight(120)
+        self.tbc_add_button = QPushButton("Add files")
+        self.tbc_up_button = QPushButton("Up")
+        self.tbc_down_button = QPushButton("Down")
+        self.tbc_remove_button = QPushButton("Remove")
+        self.tbc_sort_button = QPushButton("Sort by tape position")
+        self.manifest_edit = FileDropLineEdit(suffix_filter={".json"})
+        self.manifest_browse_button = QPushButton("Browse")
+        self.merge_info_label = QLabel("")
+        self.merge_info_label.setWordWrap(True)
+
+        # -- insert -----------------------------------------------------
+        self.into_edit = FileDropLineEdit(suffix_filter={".tbc"})
+        self.into_browse_button = QPushButton("Browse")
+        self.piece_edit = FileDropLineEdit(suffix_filter={".tbc"})
+        self.piece_browse_button = QPushButton("Browse")
+        self.fps_combo = QComboBox()
+        for label, value in (("29.97 (NTSC)", 30000.0 / 1001.0), ("25 (PAL)", 25.0)):
+            self.fps_combo.addItem(label, value)
+        self.dry_run_check = QCheckBox("Dry run - report what would happen, write nothing")
+        self.dry_run_check.setChecked(True)
+        self.insert_info_label = QLabel("")
+        self.insert_info_label.setWordWrap(True)
+
+        # Shown whenever the form is not fit to launch.
+        self.problem_label = QLabel("")
+        self.problem_label.setWordWrap(True)
         self.command_preview = QLineEdit("")
         self.command_preview.setReadOnly(True)
 
@@ -544,6 +641,36 @@ class DecodeLauncherWindow(QWidget):
         launch_layout.addWidget(self.ire0_adjust_check, 11, 2, 1, 2)
         launch_layout.addWidget(self.debug_check, 12, 0, 1, 2)
 
+        # Rows owned by one tool each; hidden unless that tool is selected, so
+        # the window keeps the shape it had before these were added.
+        self.split_rows = [
+            self._add_row(launch_layout, 16, "Pieces", self.parts_spin,
+                          QLabel("Overlap (s)"), self.overlap_spin),
+            self._add_row(launch_layout, 17, "Capture length",
+                          self.length_auto_radio, self.length_samples_radio,
+                          self.length_seconds_radio, self.length_value_edit),
+            self._add_row(launch_layout, 18, None, self.split_info_label),
+        ]
+        self.merge_rows = [
+            self._add_row(launch_layout, 19, "Decoded .tbc files", self.tbc_list),
+            self._add_row(launch_layout, 20, None, self.tbc_add_button,
+                          self.tbc_up_button, self.tbc_down_button,
+                          self.tbc_remove_button, self.tbc_sort_button),
+            self._add_row(launch_layout, 21, "Manifest", self.manifest_edit,
+                          self.manifest_browse_button),
+            self._add_row(launch_layout, 22, None, self.merge_info_label),
+        ]
+        self.insert_rows = [
+            self._add_row(launch_layout, 23, "Decode with the gap",
+                          self.into_edit, self.into_browse_button),
+            self._add_row(launch_layout, 24, "Piece to insert",
+                          self.piece_edit, self.piece_browse_button),
+            self._add_row(launch_layout, 25, "Frame rate", self.fps_combo),
+            self._add_row(launch_layout, 26, None, self.dry_run_check),
+            self._add_row(launch_layout, 27, None, self.insert_info_label),
+        ]
+        self._add_row(launch_layout, 28, None, self.problem_label)
+
         launch_layout.addWidget(QLabel("Extra arguments"), 13, 0)
         launch_layout.addWidget(self.extra_args_edit, 13, 1, 1, 3)
 
@@ -560,6 +687,231 @@ class DecodeLauncherWindow(QWidget):
         root.addWidget(launch_group)
         root.addLayout(action_row)
         self.setLayout(root)
+
+    def _add_row(self, layout, row: int, label, *widgets) -> list:
+        """Add one labelled row and return its widgets, so it can be hidden."""
+        owned = []
+        column = 0
+        if label is not None:
+            tag = QLabel(label)
+            layout.addWidget(tag, row, 0)
+            owned.append(tag)
+            column = 1
+        for widget in widgets:
+            span = 4 - column if widget is widgets[-1] and len(widgets) == 1 else 1
+            layout.addWidget(widget, row, column, 1, max(1, span))
+            owned.append(widget)
+            column += max(1, span)
+        return owned
+
+    @staticmethod
+    def _set_row_visible(rows, visible: bool) -> None:
+        for row in rows:
+            for widget in row:
+                widget.setVisible(visible)
+
+    def _tbc_paths(self) -> list[str]:
+        return [
+            self.tbc_list.item(i).text() for i in range(self.tbc_list.count())
+        ]
+
+    @staticmethod
+    def _tbc_first_loc(path: str):
+        """First field position of a decode, or None if it cannot be read."""
+        try:
+            with open(path + ".json", encoding="utf-8") as handle:
+                fields = json.load(handle).get("fields") or []
+            return fields[0]["fileLoc"] if fields else None
+        except Exception:
+            return None
+
+    def _sort_tbc_by_position(self) -> None:
+        paths = self._tbc_paths()
+        ordered = sorted(
+            paths, key=lambda p: (self._tbc_first_loc(p) is None,
+                                  self._tbc_first_loc(p) or 0)
+        )
+        self.tbc_list.clear()
+        self.tbc_list.addItems(ordered)
+        self._refresh_tool_state()
+
+    def _add_tbc_files(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select decoded .tbc files", "", "TBC files (*.tbc);;All files (*)"
+        )
+        existing = set(self._tbc_paths())
+        for path in paths:
+            if path not in existing:
+                self.tbc_list.addItem(path)
+        self._refresh_tool_state()
+
+    def _move_tbc(self, delta: int) -> None:
+        row = self.tbc_list.currentRow()
+        target = row + delta
+        if row < 0 or not 0 <= target < self.tbc_list.count():
+            return
+        item = self.tbc_list.takeItem(row)
+        self.tbc_list.insertItem(target, item)
+        self.tbc_list.setCurrentRow(target)
+        self._refresh_tool_state()
+
+    def _remove_tbc(self) -> None:
+        for item in self.tbc_list.selectedItems():
+            self.tbc_list.takeItem(self.tbc_list.row(item))
+        self._refresh_tool_state()
+
+    def _browse_into(self, target, filter_text: str) -> None:
+        selected, _ = QFileDialog.getOpenFileName(self, "Select file", "", filter_text)
+        if selected:
+            target.setText(selected)
+            self._refresh_tool_state()
+
+    def _validate_tool(self, tool: ToolSpec) -> list[str]:
+        """Everything wrong with the form, in the order worth fixing it."""
+        problems: list[str] = []
+        sub = tool.subcommand
+
+        if sub == "split":
+            capture = self.input_edit.text().strip()
+            if not capture:
+                problems.append("Choose the capture to split.")
+            elif not Path(capture).is_file():
+                problems.append(f"Capture not found: {capture}")
+            if not self.output_edit.text().strip():
+                problems.append("Choose a folder for the pieces.")
+            if self.parts_spin.value() < 2:
+                problems.append("Splitting into one piece does nothing; use 2 or more.")
+            if not self.length_auto_radio.isChecked():
+                text = self.length_value_edit.text().strip()
+                unit = "samples" if self.length_samples_radio.isChecked() else "seconds"
+                try:
+                    if float(text) <= 0:
+                        raise ValueError
+                except ValueError:
+                    problems.append(f"Enter the capture length in {unit}.")
+            elif (
+                self.input_format_combo.currentText().strip().lower() == "flac"
+                and capture
+                and Path(capture).is_file()
+                and self._flac_length(capture) is None
+            ):
+                problems.append(
+                    "This capture does not record its own length, so it cannot be "
+                    "split automatically. Enter the length in samples or seconds."
+                )
+
+        elif sub == "merge":
+            paths = self._tbc_paths()
+            if len(paths) < 2:
+                problems.append("Add at least two .tbc files to join.")
+            for path in paths:
+                if not Path(path).is_file():
+                    problems.append(f"Not found: {path}")
+                elif not Path(path + ".json").is_file():
+                    problems.append(f"No .tbc.json beside {Path(path).name}")
+            locs = [self._tbc_first_loc(p) for p in paths]
+            known = [loc for loc in locs if loc is not None]
+            if len(known) == len(locs) and known != sorted(known):
+                problems.append(
+                    "These are not in tape order - joining them would interleave "
+                    "the tape. Use 'Sort by tape position'."
+                )
+            manifest = self.manifest_edit.text().strip()
+            if manifest:
+                if not Path(manifest).is_file():
+                    problems.append(f"Manifest not found: {manifest}")
+                else:
+                    count = self._manifest_count(manifest)
+                    if count is not None and count != len(paths):
+                        problems.append(
+                            f"The manifest describes {count} piece(s) but "
+                            f"{len(paths)} file(s) are listed; there must be one "
+                            "for each."
+                        )
+            if not self.output_edit.text().strip():
+                problems.append("Choose an output base name.")
+
+        elif sub == "insert":
+            into = self.into_edit.text().strip()
+            piece = self.piece_edit.text().strip()
+            for label, path in (("decode with the gap", into), ("piece to insert", piece)):
+                if not path:
+                    problems.append(f"Choose the {label}.")
+                elif not Path(path).is_file():
+                    problems.append(f"Not found: {path}")
+                elif not Path(path + ".json").is_file():
+                    problems.append(f"No .tbc.json beside {Path(path).name}")
+            if into and piece and Path(into) == Path(piece):
+                problems.append("The two files must be different.")
+        return problems
+
+    @staticmethod
+    def _manifest_count(path: str):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return len(json.load(handle).get("parts") or [])
+        except Exception:
+            return None
+
+    @staticmethod
+    def _flac_length(path: str):
+        """Sample count from the capture's own RF tags, if it carries them."""
+        try:
+            with open(path, "rb") as handle:
+                if handle.read(4) != b"fLaC":
+                    return None
+                while True:
+                    head = handle.read(4)
+                    if len(head) < 4:
+                        return None
+                    last = head[0] & 0x80
+                    kind = head[0] & 0x7F
+                    length = int.from_bytes(head[1:4], "big")
+                    body = handle.read(length)
+                    if kind == 4:
+                        return _rf_total_samples(body)
+                    if last:
+                        return None
+        except OSError:
+            return None
+
+    def _describe_selection(self, tool: ToolSpec) -> str:
+        """The one-line summary shown under each tool's fields."""
+        sub = tool.subcommand
+        if sub == "split":
+            capture = self.input_edit.text().strip()
+            if capture and Path(capture).is_file():
+                total = self._flac_length(capture)
+                if total:
+                    rate = float(self.frequency_edit.text() or 40) * 1e6
+                    secs = total / rate if rate else 0
+                    each = secs / max(1, self.parts_spin.value())
+                    return (
+                        f"Detected {total:,} samples ({secs / 60:.0f} min) from the "
+                        f"capture's own tags. Each piece is about {each / 60:.0f} min."
+                    )
+                return "This capture does not record its own length; state it below."
+            return ""
+        if sub == "merge":
+            paths = self._tbc_paths()
+            if not paths:
+                return ""
+            known = [p for p in paths if self._tbc_first_loc(p) is not None]
+            return f"{len(paths)} file(s) listed, {len(known)} with readable metadata."
+        if sub == "insert":
+            into = self.into_edit.text().strip()
+            if into and Path(into + ".json").is_file():
+                try:
+                    with open(into + ".json", encoding="utf-8") as handle:
+                        fields = json.load(handle).get("fields") or []
+                    locs = [f["fileLoc"] for f in fields]
+                    if len(locs) > 1:
+                        gap = max(b - a for a, b in zip(locs, locs[1:]))
+                        rate = float(self.frequency_edit.text() or 40) * 1e6
+                        return f"Largest gap in the target: {gap / rate / 60:.1f} min."
+                except Exception:
+                    return ""
+        return ""
 
     def _wire_events(self) -> None:
         self.tool_combo.currentIndexChanged.connect(self._refresh_tool_state)
@@ -586,6 +938,28 @@ class DecodeLauncherWindow(QWidget):
         self.profile_file_browse_button.clicked.connect(self._browse_profile_file)
         self.microarch_combo.currentIndexChanged.connect(self._refresh_tool_state)
         self.microarch_locate_button.clicked.connect(self._locate_level_binary)
+        self.tbc_add_button.clicked.connect(self._add_tbc_files)
+        self.tbc_up_button.clicked.connect(lambda: self._move_tbc(-1))
+        self.tbc_down_button.clicked.connect(lambda: self._move_tbc(1))
+        self.tbc_remove_button.clicked.connect(self._remove_tbc)
+        self.tbc_sort_button.clicked.connect(self._sort_tbc_by_position)
+        self.manifest_browse_button.clicked.connect(
+            lambda: self._browse_into(self.manifest_edit, "Manifest (*.json)")
+        )
+        self.into_browse_button.clicked.connect(
+            lambda: self._browse_into(self.into_edit, "TBC files (*.tbc)")
+        )
+        self.piece_browse_button.clicked.connect(
+            lambda: self._browse_into(self.piece_edit, "TBC files (*.tbc)")
+        )
+        for widget in (self.parts_spin, self.overlap_spin):
+            widget.valueChanged.connect(self._refresh_tool_state)
+        for widget in (self.length_value_edit, self.manifest_edit,
+                       self.into_edit, self.piece_edit):
+            widget.textChanged.connect(self._refresh_tool_state)
+        for button in (self.length_auto_radio, self.length_samples_radio,
+                       self.length_seconds_radio, self.dry_run_check):
+            button.toggled.connect(self._refresh_tool_state)
         self.launch_button.clicked.connect(self._launch_selected_tool)
         self.launch_tbc_tools_button.clicked.connect(self._launch_tbc_tools)
         self.close_button.clicked.connect(self.close)
@@ -646,6 +1020,37 @@ class DecodeLauncherWindow(QWidget):
         self.profile_combo.setEnabled(decode_selected and not profile_file_selected)
         self.profile_file_edit.setEnabled(profile_file_selected)
         self.profile_file_browse_button.setEnabled(profile_file_selected)
+
+        sub = tool.subcommand
+        self._set_row_visible(self.split_rows, sub == "split")
+        self._set_row_visible(self.merge_rows, sub == "merge")
+        self._set_row_visible(self.insert_rows, sub == "insert")
+
+        # The new tools drive the shared fields too, so re-enable the ones each
+        # of them actually uses instead of leaving everything off.
+        for widget in (self.input_edit, self.input_browse_button):
+            widget.setEnabled(sub in ("decode", "split"))
+        for widget in (self.output_edit, self.output_browse_button):
+            widget.setEnabled(sub in ("decode", "split", "merge"))
+        for widget in (self.frequency_edit, self.overwrite_check):
+            widget.setEnabled(sub in ("decode", "split", "merge", "insert"))
+        self.input_format_combo.setEnabled(sub in ("decode", "split"))
+        # Only meaningful when a length is actually being typed in.
+        self.length_value_edit.setEnabled(not self.length_auto_radio.isChecked())
+
+        for label, owner in (
+            (self.split_info_label, "split"),
+            (self.merge_info_label, "merge"),
+            (self.insert_info_label, "insert"),
+        ):
+            label.setText(self._describe_selection(tool) if sub == owner else "")
+
+        problems = self._validate_tool(tool) if sub in ("split", "merge", "insert") else []
+        self.problem_label.setText(
+            "" if not problems else "Fix before launching:\n- " + "\n- ".join(problems)
+        )
+        self.problem_label.setVisible(bool(problems))
+        self.launch_button.setEnabled(not problems)
 
         self.command_preview.setText(self._terminal_preview_command(tool))
         self.note_label.setText(tool.notes)
@@ -765,8 +1170,47 @@ class DecodeLauncherWindow(QWidget):
         extra = self.extra_args_edit.text().strip()
         extra_args = _split_user_args(extra, strict=strict) if extra else []
         return build_tape_decode_command(
-            [tool.subcommand] + extra_args, level=level
+            [tool.subcommand] + self._build_subcommand_args(tool) + extra_args,
+            level=level,
         )
+
+    def _build_subcommand_args(self, tool: ToolSpec) -> list[str]:
+        """Arguments the guided fields contribute for the new subcommands."""
+        sub = tool.subcommand
+        if sub == "split":
+            args = [self.input_edit.text().strip(), self.output_edit.text().strip()]
+            args += ["--parts", str(self.parts_spin.value())]
+            args += ["--overlap", "%g" % self.overlap_spin.value()]
+            args += ["--input-format", self.input_format_combo.currentText().strip()]
+            frequency = self.frequency_edit.text().strip()
+            if frequency:
+                args += ["--frequency", frequency]
+            value = self.length_value_edit.text().strip()
+            if value and self.length_samples_radio.isChecked():
+                args += ["--total-samples", value]
+            elif value and self.length_seconds_radio.isChecked():
+                args += ["--duration", value]
+            return [a for a in args if a]
+        if sub == "merge":
+            args = self._tbc_paths()
+            args += ["-o", self.output_edit.text().strip()]
+            manifest = self.manifest_edit.text().strip()
+            if manifest:
+                args += ["-m", manifest]
+            if self.overwrite_check.isChecked():
+                args.append("--overwrite")
+            return [a for a in args if a]
+        if sub == "insert":
+            args = ["--into", self.into_edit.text().strip(),
+                    "--insert", self.piece_edit.text().strip()]
+            frequency = self.frequency_edit.text().strip()
+            if frequency:
+                args += ["--frequency", frequency]
+            args += ["--fps", "%.6f" % self.fps_combo.currentData()]
+            if self.dry_run_check.isChecked():
+                args.append("--dry-run")
+            return [a for a in args if a]
+        return []
 
     def _terminal_preview_command(self, tool: ToolSpec) -> str:
         level = self._selected_microarch_level()

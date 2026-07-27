@@ -15,7 +15,7 @@ _TRIPLES: tuple[str, ...] = ("x86_64-apple-darwin", "aarch64-apple-darwin")
 
 
 def _binary_name() -> str:
-    return "tape-decode.exe" if os.name == "nt" else "tape-decode"
+    return "tape-decode-rust-fast.exe" if os.name == "nt" else "tape-decode-rust-fast"
 
 
 def _platform_sep() -> str:
@@ -102,7 +102,7 @@ def main() -> None:
         "-y",
         "--clean",
         "--name",
-        "decode-rust-gui",
+        "tape-decode-rust-fast-gui",
     ]
 
     # Explicitly ensure Qt platform plugins (cocoa etc.) are inside the bundle

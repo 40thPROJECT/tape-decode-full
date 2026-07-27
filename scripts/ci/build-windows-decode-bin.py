@@ -15,7 +15,7 @@ _TRIPLES: tuple[str, ...] = ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"
 
 
 def _binary_name() -> str:
-    return "tape-decode.exe" if os.name == "nt" else "tape-decode"
+    return "tape-decode-rust-fast.exe" if os.name == "nt" else "tape-decode-rust-fast"
 
 
 def _platform_sep() -> str:
@@ -40,15 +40,15 @@ def _resolve_tape_decode_bin() -> Path:
                 return p.resolve()
     # Legacy single-build locations and generic target/
     candidates = [
-        Path(r"target\x86_64-pc-windows-msvc\release\tape-decode.exe"),
-        Path(r"target\aarch64-pc-windows-msvc\release\tape-decode.exe"),
-        Path(r"target\release\tape-decode.exe"),
+        Path(r"target\x86_64-pc-windows-msvc\release\tape-decode-rust-fast.exe"),
+        Path(r"target\aarch64-pc-windows-msvc\release\tape-decode-rust-fast.exe"),
+        Path(r"target\release\tape-decode-rust-fast.exe"),
     ]
     for candidate in candidates:
         if candidate and candidate.is_file():
             return candidate.resolve()
     raise FileNotFoundError(
-        "Could not find tape-decode.exe. Build it before running this packaging script."
+        "Could not find tape-decode-rust-fast.exe. Build it before running this packaging script."
     )
 
 
@@ -97,7 +97,7 @@ def main() -> None:
         "resources\\icon\\tape-decode-rust.ico",
         "--onefile",
         "--name",
-        "decode-rust-gui",
+        "tape-decode-rust-fast-gui",
     ]
 
     for src, dest in _discover_level_binaries():

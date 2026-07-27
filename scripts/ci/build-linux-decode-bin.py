@@ -15,7 +15,7 @@ _TRIPLES: tuple[str, ...] = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-
 
 
 def _binary_name() -> str:
-    return "tape-decode.exe" if os.name == "nt" else "tape-decode"
+    return "tape-decode-rust-fast.exe" if os.name == "nt" else "tape-decode-rust-fast"
 
 
 def _platform_sep() -> str:
@@ -99,7 +99,7 @@ def main() -> None:
         "resources/icon/tape-decode-rust-256.png",
         "--onefile",
         "--name",
-        "decode-rust-gui",
+        "tape-decode-rust-fast-gui",
     ]
 
     # Explicitly ensure Qt platform plugins (especially libqxcb.so) are inside the bundle
