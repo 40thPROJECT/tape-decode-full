@@ -23,4 +23,4 @@ if [ -z "${QT_QPA_PLATFORM:-}" ]; then
   fi
 fi
 
-exec "${HERE}/usr/bin/decode-rust-gui" "$@"
+exec "${HERE}/usr/bin/tape-decode-full-gui" "$@"

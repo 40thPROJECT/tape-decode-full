@@ -92,7 +92,7 @@ def main() -> None:
         "--add-data",
         f"resources\\icon\\tape-decode-full-256.png;tape-decode-full-256.png",
         "--add-data",
-        f"resources\\icon\\tape-decode-full-256.png;decode-rust-gui.png",
+        f"resources\\icon\\tape-decode-full-256.png;tape-decode-full-gui.png",
         "--icon",
         "resources\\icon\\tape-decode-full.ico",
         # A GUI app should not sit behind a console window.  The tools it

@@ -291,13 +291,13 @@ jobs:
           cp resources/appimage/AppRun AppDir/AppRun
           chmod +x AppDir/AppRun
 
-          cp resources/icon/tape-decode-rust-256.png AppDir/usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png
+          cp resources/icon/tape-decode-full-256.png AppDir/usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png
 
           # Keep one canonical icon file and expose required aliases via symlink to avoid duplicate payload files.
           ln -sf usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png AppDir/tape-decode-full-gui.png
           ln -sf tape-decode-full-gui.png AppDir/.DirIcon
-          ln -sf ../../tape-decode-full-gui.png AppDir/resources/icon/tape-decode-rust-256.png
-          ln -sf tape-decode-full-gui.png AppDir/tape-decode-rust-256.png
+          ln -sf ../../tape-decode-full-gui.png AppDir/resources/icon/tape-decode-full-256.png
+          ln -sf tape-decode-full-gui.png AppDir/tape-decode-full-256.png
 
           ln -sf usr/share/applications/tape-decode-full-gui.desktop AppDir/tape-decode-full-gui.desktop
 

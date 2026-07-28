@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Tape Decode Full
+Exec=tape-decode-full-gui
+Terminal=false
+Icon=tape-decode-full-gui
+Type=Application
+Categories=AudioVideo;Video;
+Comment=Tape Decode Full decode launcher
