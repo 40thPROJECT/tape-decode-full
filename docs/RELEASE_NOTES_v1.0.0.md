@@ -1,152 +1,110 @@
-# v1.0.0 — split, merge and insert
+Decode one tape across **several machines**. Adds `split`, `merge` and `insert`
+to [tape-decode-rust](https://github.com/harrypm/tape-decode-rust), in the CLI
+and in the launcher.
 
-**[English](#english) · [Español](#español)**
+Decodifica una cinta repartiéndola entre **varias máquinas**. Añade `split`,
+`merge` e `insert` a [tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
+tanto por línea de comandos como en el lanzador.
 
-A fork of [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
-that adds decoding one tape across **several machines**, in the CLI and in the
-launcher.
+## Downloads / Descargas
 
-## Downloads
+| file | | |
+|---|---|---|
+| `tape-decode-full-gui-windows_1.0.0_x86_64.exe` | 105 MB | GUI, CLI bundled inside · interfaz, con el CLI dentro |
+| `tape-decode-full-cli-windows_1.0.0_x86_64.exe` | 59 MB | command line only · solo línea de comandos |
+| `SHA256SUMS.txt` | | verify / verificación |
 
-| file | what it is |
-|---|---|
-| `tape-decode-full-gui-windows_1.0.0_x86_64.exe` | GUI, with the CLI bundled inside |
-| `tape-decode-full-cli-windows_1.0.0_x86_64.exe` | command line only |
+Windows x86-64. Built with the `x86_64-pc-windows-gnu` toolchain rather than
+MSVC. Compilados con el toolchain `x86_64-pc-windows-gnu`, no con MSVC.
 
-Verify with `SHA256SUMS.txt`. Built with the `x86_64-pc-windows-gnu` toolchain
-rather than MSVC.
+## What's in it
 
----
+**`split`** — cuts a capture into standalone pieces. A byte copy: nothing is
+re-encoded and the pieces are bit-identical to the corresponding samples. Reads
+the capture's length from its own RF Vorbis tags or from the capture tool's
+`.json` sidecar.
 
-## English
+**`merge`** — joins the decoded `.tbc` files, trimming the overlap, repairing
+field parity at every join, and refusing files given out of tape order.
 
-`--mt-threads` already spreads a decode across the cores of one machine, and it
-does that well. This adds the other axis: cut the capture into standalone pieces,
-decode a piece on each machine, and put the results back on one timeline.
+**`insert`** — fills a gap left by a piece that had to be decoded again. Works in
+place, so the only extra space needed is the size of the insert.
 
-### What's new
+Guided forms for all three in the launcher, with validation that blocks launching
+while anything is wrong.
 
-**`split`** cuts an RF capture into standalone pieces. FLAC frames are
-self-contained, so a file made of the original headers plus a run of whole frames
-is a valid capture covering that stretch of tape — splitting is a byte copy, with
-no re-encoding, and the pieces are bit-identical to the corresponding samples.
+## Qué trae
 
-Boundaries are found by bisecting on frame headers rather than by asking the
-container where a timestamp lives. That matters on a long capture: past 2^36
-samples a FLAC header cannot record its own length, and position estimates from
-the bitrate can be far out — 25x short, on the 2h45m capture this was built for.
+**`split`** — corta una captura en piezas autónomas. Es una copia de bytes: no se
+recodifica nada y las piezas son idénticas bit a bit a las muestras
+correspondientes. Lee la duración de las etiquetas Vorbis de la propia captura o
+del `.json` de la herramienta de captura.
 
-The length is read from the capture's own `RF_TOTAL_SAMPLES` Vorbis tag (MISRC)
-or from the capture tool's `.json` sidecar (DomesDay Duplicator), and stated by
-hand only when neither exists.
+**`merge`** — une los `.tbc` decodificados, recorta el solape, repara la paridad
+de campo en cada unión, y se niega si le pasas los ficheros desordenados.
 
-**`merge`** joins the decoded `.tbc` files, trimming the overlap between pieces,
-cutting each part where the next one actually started, skipping parts that
-produced nothing, and repairing field parity at every join. It refuses files
-given out of tape order rather than silently interleaving the tape.
+**`insert`** — rellena el hueco que deja una pieza que hubo que decodificar otra
+vez. Trabaja en el propio fichero, así que solo necesita el espacio del trozo
+insertado.
 
-**`insert`** fills a gap in the middle of a finished decode, for when one
-machine's piece failed and had to be decoded again. It extends the file and
-shifts the tail along instead of splitting and re-merging, so the only extra
-space needed is the size of the insert.
+Formularios para las tres en el lanzador, con validaciones que impiden lanzar
+mientras haya algo mal.
 
-The launcher has guided forms for all three, with validation that blocks
-launching while anything is wrong.
+## Quick start / Para empezar
 
-### Measured
+```bash
+tape-decode-full split capture.ldf pieces/ --parts 4
+tape-decode-full decode --profile NTSC_VHS --input-format flac pieces/capture.part00.ldf --output out
+tape-decode-full merge pc1.tbc pc2.tbc pc3.tbc pc4.tbc -o tape -m pieces/capture.parts.json
+```
 
-On an i5-11400F (6 cores, 12 threads), decoding the same 60 s of a 40 MSPS NTSC
-VHS capture, two runs at each setting:
+Keep the `.parts.json`: without it `merge` cannot tell where each decode belongs.
+Guarda el `.parts.json`: sin él `merge` no sabe dónde va cada decode.
+
+## Before you reach for it / Antes de recurrir a esto
+
+On a 6-core i5-11400F, decoding the same 60 s of a 40 MSPS NTSC capture, two runs
+at each setting:
 
 | `--mt-threads` | FPS | vs serial |
 |---|---|---|
-| 0 (serial) | 3.27 | 1.00x |
-| 2 | 4.88 | 1.49x |
+| 0 | 3.27 | 1.00x |
 | 4 | 8.62 | 2.64x |
-| 6 | 10.89 | 3.33x |
 | 8 | 12.08 | 3.70x |
 | 12 | 13.05 | 4.00x |
 
-Worth knowing before reaching for `split`: threading alone already gives 4x on
-one machine, so splitting across machines is for when that is still not enough.
+Threading alone is already 4x on one machine. Splitting across machines is for
+when that is still not enough — and it is worth raising `--mt-threads` first.
 
-`split` was verified against a real capture at 3 and 5 pieces — every piece's
+Solo con los hilos ya tienes 4x en una única máquina. Repartir entre varias es
+para cuando eso no basta; conviene subir `--mt-threads` antes que nada.
+
+## Verified / Verificado
+
+`split` was checked against a real capture at 3 and 5 pieces: every piece's
 samples match the original exactly at the offset it declares. `merge` and
-`insert` were verified on constructed `.tbc` files where each field carries a
-pattern identifying its position.
+`insert` were checked on `.tbc` files where each field carries a pattern
+identifying its position — right content, right order, no duplicates, parity
+alternating, and both refusal paths. 11 unit tests.
 
----
-
-## Español
-
-Un fork de [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
-que añade decodificar una cinta repartiéndola entre **varias máquinas**, tanto
-por línea de comandos como en el lanzador.
-
-### Descargas
-
-| fichero | qué es |
-|---|---|
-| `tape-decode-full-gui-windows_1.0.0_x86_64.exe` | GUI, con el CLI incluido dentro |
-| `tape-decode-full-cli-windows_1.0.0_x86_64.exe` | solo línea de comandos |
-
-Verifícalos con `SHA256SUMS.txt`. Compilados con el toolchain
-`x86_64-pc-windows-gnu`, no con MSVC.
-
-### Qué añade
-
-`--mt-threads` ya reparte un decode entre los núcleos de una máquina, y lo hace
-bien. Esto añade el otro eje: cortar la captura en piezas autónomas, decodificar
-una en cada máquina, y volver a juntar los resultados en una sola línea de
-tiempo.
-
-**`split`** corta una captura RF en piezas autónomas. Los frames FLAC son
-autocontenidos, así que un fichero formado por las cabeceras originales más una
-tirada de frames enteros es una captura válida de ese tramo de cinta — partir es
-una copia de bytes, sin recodificar nada, y las piezas son idénticas bit a bit a
-las muestras correspondientes.
-
-Las fronteras se localizan bisecando sobre cabeceras de frame, no preguntándole
-al contenedor dónde cae un timestamp. Eso importa en una captura larga: pasadas
-2^36 muestras una cabecera FLAC no puede registrar su propia longitud, y las
-estimaciones de posición a partir del bitrate pueden desviarse muchísimo — 25
-veces corta, en la captura de 2 h 45 para la que se hizo esto.
-
-La duración se lee de la etiqueta Vorbis `RF_TOTAL_SAMPLES` de la propia captura
-(MISRC) o del `.json` que deja la herramienta de captura (DomesDay Duplicator), y
-solo hay que indicarla a mano cuando no existe ninguna de las dos.
-
-**`merge`** une los `.tbc` decodificados, recortando el solape entre piezas,
-cortando cada parte donde empezó realmente la siguiente, saltando las que no
-produjeron nada, y reparando la paridad de campo en cada unión. Se niega si le
-pasas los ficheros desordenados, en vez de entrelazarte la cinta en silencio.
-
-**`insert`** rellena un hueco en mitad de un decode ya terminado, para cuando la
-pieza de una máquina falla y hay que decodificarla otra vez. Alarga el fichero y
-desplaza la cola en vez de partirlo y volver a unirlo, así que el único espacio
-extra necesario es el del trozo insertado.
-
-El lanzador trae formularios para las tres, con validaciones que impiden lanzar
-mientras haya algo mal.
-
-### Medido
-
-En un i5-11400F (6 núcleos, 12 hilos), decodificando los mismos 60 s de una
-captura VHS NTSC a 40 MSPS, dos pasadas por cada valor:
-
-| `--mt-threads` | FPS | vs serie |
-|---|---|---|
-| 0 (serie) | 3,27 | 1,00x |
-| 2 | 4,88 | 1,49x |
-| 4 | 8,62 | 2,64x |
-| 6 | 10,89 | 3,33x |
-| 8 | 12,08 | 3,70x |
-| 12 | 13,05 | 4,00x |
-
-Conviene saberlo antes de recurrir a `split`: solo con los hilos ya tienes 4x en
-una única máquina, así que repartir entre varias es para cuando eso no baste.
-
-`split` se verificó contra una captura real con 3 y 5 piezas — las muestras de
+`split` se comprobó contra una captura real con 3 y 5 piezas: las muestras de
 cada pieza coinciden exactamente con el original en el offset que declara.
-`merge` e `insert` se verificaron sobre ficheros `.tbc` construidos donde cada
-campo lleva un patrón que identifica su posición.
+`merge` e `insert` se comprobaron sobre `.tbc` donde cada campo lleva un patrón
+que identifica su posición. 11 tests unitarios.
+
+Full documentation / Documentación completa:
+**[README](https://github.com/40thPROJECT/tape-decode-full#readme)**
+
+## Credits / Créditos
+
+All the hard work is
+[harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
+[oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode) and
+[harrypm/FLAC-Chop](https://github.com/harrypm/FLAC-Chop) — whose reading of the
+RF Vorbis tags this borrows — and their contributors. This fork only makes it
+finish sooner.
+
+Todo el trabajo duro es de esos tres proyectos y de quienes contribuyen a ellos.
+Este fork solo hace que termine antes.
+
+**by ElMamadoJoe**
