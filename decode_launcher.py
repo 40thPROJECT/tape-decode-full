@@ -265,8 +265,8 @@ def _resolve_icon_path() -> Optional[Path]:
     if meipass:
         mp = Path(meipass)
         candidates.extend([
-            mp / "resources" / "icon" / "tape-decode-rust-256.png",
-            mp / "tape-decode-rust-256.png",
+            mp / "resources" / "icon" / "tape-decode-full-256.png",
+            mp / "tape-decode-full-256.png",
             mp / "decode-rust-gui.png",
         ])
 
@@ -275,8 +275,8 @@ def _resolve_icon_path() -> Optional[Path]:
         try:
             exe_dir = Path(sys.executable).resolve().parent
             candidates.extend([
-                exe_dir / "resources" / "icon" / "tape-decode-rust-256.png",
-                exe_dir / "tape-decode-rust-256.png",
+                exe_dir / "resources" / "icon" / "tape-decode-full-256.png",
+                exe_dir / "tape-decode-full-256.png",
                 exe_dir / "decode-rust-gui.png",
             ])
             # AppImage mount layout: exe at <mount>/usr/bin/decode-rust-gui
@@ -300,9 +300,9 @@ def _resolve_icon_path() -> Optional[Path]:
     try:
         here = Path(__file__).resolve().parent
         candidates.extend([
-            here / "resources" / "icon" / "tape-decode-rust-256.png",
-            here.parent / "resources" / "icon" / "tape-decode-rust-256.png",
-            Path.cwd() / "resources" / "icon" / "tape-decode-rust-256.png",
+            here / "resources" / "icon" / "tape-decode-full-256.png",
+            here.parent / "resources" / "icon" / "tape-decode-full-256.png",
+            Path.cwd() / "resources" / "icon" / "tape-decode-full-256.png",
         ])
     except Exception:
         pass

@@ -88,13 +88,13 @@ def main() -> None:
         f"crates\\tape-decode-cli\\src\\profiles\\profiles.json;.",
         # Bundle icon PNG so _resolve_icon_path / setWindowIcon can find it inside onefile for taskbar
         "--add-data",
-        f"resources\\icon\\tape-decode-rust-256.png;resources\\icon\\tape-decode-rust-256.png",
+        f"resources\\icon\\tape-decode-full-256.png;resources\\icon\\tape-decode-full-256.png",
         "--add-data",
-        f"resources\\icon\\tape-decode-rust-256.png;tape-decode-rust-256.png",
+        f"resources\\icon\\tape-decode-full-256.png;tape-decode-full-256.png",
         "--add-data",
-        f"resources\\icon\\tape-decode-rust-256.png;decode-rust-gui.png",
+        f"resources\\icon\\tape-decode-full-256.png;decode-rust-gui.png",
         "--icon",
-        "resources\\icon\\tape-decode-rust.ico",
+        "resources\\icon\\tape-decode-full.ico",
         # A GUI app should not sit behind a console window.  The tools it
         # launches still open their own terminal; this only removes the
         # bootloader console.
