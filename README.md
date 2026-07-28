@@ -3,10 +3,44 @@
 A fork of [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
 that adds `split`, `merge` and `insert`, so one tape can be decoded across
 several machines rather than only across the cores of one.
-See **[docs/tape-decode-full.md](docs/tape-decode-full.md)** (English and Spanish).
 
-Everything below is the upstream project's own documentation and still applies;
-the binary is named `tape-decode-full`.
+**English** · **[Español](#tape-decode-full--español)**
+
+`split` cuts an RF capture into standalone pieces — a byte copy, with no
+re-encoding — `merge` joins the decoded `.tbc` files back onto one timeline, and
+`insert` fills a gap when one machine's piece has to be decoded again. All three
+are in the launcher as well.
+
+Full write-up: **[docs/tape-decode-full.md](docs/tape-decode-full.md)**.
+
+Worth knowing first: on a 6-core i5-11400F, `--mt-threads 12` alone decodes 4x
+faster than serial. Splitting across machines is for when that is still not
+enough.
+
+Everything below the rule is the upstream project's own documentation and still
+applies; the binary is named `tape-decode-full`.
+
+---
+
+# tape-decode-full — Español
+
+Un fork de [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
+que añade `split`, `merge` e `insert`, para poder decodificar una cinta
+repartiéndola entre varias máquinas y no solo entre los núcleos de una.
+
+`split` corta una captura RF en piezas autónomas —una copia de bytes, sin
+recodificar nada—, `merge` vuelve a unir los `.tbc` decodificados en una sola
+línea de tiempo, e `insert` rellena un hueco cuando hay que volver a decodificar
+la pieza de una máquina. Las tres están también en el lanzador.
+
+Documentación completa: **[docs/tape-decode-full.md](docs/tape-decode-full.md)**.
+
+Conviene saberlo antes: en un i5-11400F de 6 núcleos, `--mt-threads 12` por sí
+solo decodifica 4 veces más rápido que en serie. Repartir entre máquinas es para
+cuando eso no basta.
+
+Todo lo que hay debajo de la línea es la documentación del proyecto original y
+sigue siendo válida; el binario se llama `tape-decode-full`.
 
 ---
 
