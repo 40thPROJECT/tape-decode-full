@@ -669,6 +669,11 @@ pub(crate) struct SplitRequest<'a> {
     pub(crate) parts: u64,
     pub(crate) overlap_samples: u64,
     pub(crate) total_samples: u64,
+    /// Whether the caller stated the length rather than it being read from the
+    /// capture.  The last piece normally runs to the end of the file so a low
+    /// reading cannot truncate the tape; when the length was given outright,
+    /// that is the range being asked for and the last piece is held to it.
+    pub(crate) length_was_stated: bool,
 }
 
 pub(crate) fn run(req: SplitRequest<'_>, mut progress: impl FnMut(u64, u64)) -> Result<Manifest> {
@@ -682,7 +687,12 @@ pub(crate) fn run(req: SplitRequest<'_>, mut progress: impl FnMut(u64, u64)) -> 
         .unwrap_or("capture")
         .to_string();
 
-    let (cuts, overlap) = plan_cuts(req.total_samples, req.parts, req.overlap_samples);
+    let (mut cuts, overlap) = plan_cuts(req.total_samples, req.parts, req.overlap_samples);
+    if req.length_was_stated {
+        if let Some(last) = cuts.last_mut() {
+            last.1 = Some(req.total_samples);
+        }
+    }
     let pieces = match req.format {
         SampleFormat::Flac => plan_flac(req.input, &stem, &cuts, req.total_samples)?,
         other => plan_raw(req.input, &stem, other, &cuts)?,

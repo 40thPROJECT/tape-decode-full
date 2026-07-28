@@ -450,6 +450,7 @@ fn capture_samples(path: &Path, format: SampleFormat) -> Result<u64> {
 fn run_split(cli: SplitArgs) -> Result<()> {
     let format: SampleFormat = cli.input_format.into();
     let sample_rate_hz = cli.frequency * 1e6;
+    let length_was_stated = cli.total_samples.is_some() || cli.duration.is_some();
     let total_samples = match (cli.total_samples, cli.duration) {
         (Some(n), _) => n,
         (None, Some(secs)) => (secs * sample_rate_hz) as u64,
@@ -479,6 +480,7 @@ fn run_split(cli: SplitArgs) -> Result<()> {
             parts: cli.parts,
             overlap_samples: (cli.overlap * sample_rate_hz) as u64,
             total_samples,
+            length_was_stated,
         },
         |done, total| {
             // One line per 5%, so a log file does not fill with a progress bar.
