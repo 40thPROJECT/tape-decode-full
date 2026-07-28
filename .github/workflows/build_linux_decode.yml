@@ -41,7 +41,7 @@ jobs:
             appimage_arch: aarch64
             artifact_suffix: arm64
 
-    name: Build decode-rust-gui AppImage (${{ matrix.arch }})
+    name: Build tape-decode-full-gui AppImage (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     env:
       SETUPTOOLS_RUST_CARGO_PROFILE: release
@@ -78,7 +78,7 @@ jobs:
 
       - name: Build tape-decode binary (single)
         if: matrix.arch != 'x86_64'
-        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
 
       - name: Build tape-decode binaries (x86-64 v1-v4)
         if: matrix.arch == 'x86_64'
@@ -95,7 +95,7 @@ jobs:
             esac
             echo "::group::Build ${level}"
             CARGO_TARGET_DIR="target-x86-64-${level}" RUSTFLAGS="$rustflags" \
-              cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+              cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
             echo "::endgroup::"
           }
           for level in v1 v2 v3 v4; do
@@ -121,7 +121,7 @@ jobs:
       - name: Build launcher binary
         if: matrix.arch != 'x86_64'
         env:
-          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode
+          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode-full
         run: python3 scripts/ci/build-linux-decode-bin.py
 
       - name: Build launcher binary (with microarch levels)
@@ -142,25 +142,25 @@ jobs:
             AppDir/usr/share/icons/hicolor/256x256/apps \
             AppDir/resources/icon
 
-          cp dist/decode-rust-gui AppDir/usr/bin/decode-rust-gui
-          chmod +x AppDir/usr/bin/decode-rust-gui
+          cp dist/tape-decode-full-gui AppDir/usr/bin/tape-decode-full-gui
+          chmod +x AppDir/usr/bin/tape-decode-full-gui
 
-          cp resources/appimage/decode-rust-gui.desktop AppDir/usr/share/applications/decode-rust-gui.desktop
+          cp resources/appimage/tape-decode-full-gui.desktop AppDir/usr/share/applications/tape-decode-full-gui.desktop
           cp resources/appimage/AppRun AppDir/AppRun
           chmod +x AppDir/AppRun
 
-          cp resources/icon/tape-decode-rust-256.png AppDir/usr/share/icons/hicolor/256x256/apps/decode-rust-gui.png
+          cp resources/icon/tape-decode-rust-256.png AppDir/usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png
 
           # Keep one canonical icon file and expose required aliases via symlink to avoid duplicate payload files.
-          ln -sf usr/share/icons/hicolor/256x256/apps/decode-rust-gui.png AppDir/decode-rust-gui.png
-          ln -sf decode-rust-gui.png AppDir/.DirIcon
-          ln -sf ../../decode-rust-gui.png AppDir/resources/icon/tape-decode-rust-256.png
-          ln -sf decode-rust-gui.png AppDir/tape-decode-rust-256.png
+          ln -sf usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png AppDir/tape-decode-full-gui.png
+          ln -sf tape-decode-full-gui.png AppDir/.DirIcon
+          ln -sf ../../tape-decode-full-gui.png AppDir/resources/icon/tape-decode-rust-256.png
+          ln -sf tape-decode-full-gui.png AppDir/tape-decode-rust-256.png
 
-          ln -sf usr/share/applications/decode-rust-gui.desktop AppDir/decode-rust-gui.desktop
+          ln -sf usr/share/applications/tape-decode-full-gui.desktop AppDir/tape-decode-full-gui.desktop
 
           APPIMAGE_TOOL="${{ matrix.appimagetool }}"
-          APPIMAGE_NAME="decode-rust-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.AppImage"
+          APPIMAGE_NAME="tape-decode-full-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.AppImage"
 
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/${APPIMAGE_TOOL}"
           chmod +x "${APPIMAGE_TOOL}"
@@ -170,13 +170,13 @@ jobs:
 
           # Only force a microarch level on x86-64 builds. On arm64 the bundled binary is aarch64.
           if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
-            TAPE_DECODE_MICROARCH=x86-64-v1 APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            TAPE_DECODE_MICROARCH=x86-64-v1 APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           else
-            APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           fi
-          grep -q "PAL_VHS" /tmp/decode-rust-gui_profiles.txt || true
+          grep -q "PAL_VHS" /tmp/tape-decode-full-gui_profiles.txt || true
 
-          ZIP_NAME="decode-rust-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.zip"
+          ZIP_NAME="tape-decode-full-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.zip"
           zip -j "${ZIP_NAME}" "${APPIMAGE_NAME}"
           test -f "${ZIP_NAME}"
           test "$(unzip -Z1 "${ZIP_NAME}" | wc -l)" -eq 1
@@ -185,7 +185,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-zip-${{ matrix.arch }}
-          path: decode-rust-gui-linux_*_${{ matrix.artifact_suffix }}.zip
+          path: tape-decode-full-gui-linux_*_${{ matrix.artifact_suffix }}.zip
           if-no-files-found: error
 
   release:
@@ -236,5 +236,5 @@ jobs:
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
           files: |
-            release-assets/**/decode-rust-gui-linux_*_x86_64.zip
-            release-assets/**/decode-rust-gui-linux_*_arm64.zip
+            release-assets/**/tape-decode-full-gui-linux_*_x86_64.zip
+            release-assets/**/tape-decode-full-gui-linux_*_arm64.zip

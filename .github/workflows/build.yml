@@ -24,7 +24,7 @@ env:
 
 jobs:
   windows-decode:
-    name: Build decode-rust-gui EXE (x86_64)
+    name: Build tape-decode-full-gui EXE (x86_64)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -66,7 +66,7 @@ jobs:
             esac
             echo "::group::Build Windows ${level}"
             CARGO_TARGET_DIR="target-x86-64-${level}" RUSTFLAGS="$rustflags" \
-              cargo build --release --target x86_64-pc-windows-msvc --bin tape-decode
+              cargo build --release --target x86_64-pc-windows-msvc --bin tape-decode-full
             echo "::endgroup::"
           }
           for level in v1 v2 v3 v4; do
@@ -77,8 +77,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ls -la target-x86-64-v*/x86_64-pc-windows-msvc/release/tape-decode.exe 2>/dev/null || true
-          ls -la target/x86_64-pc-windows-msvc/release/tape-decode.exe 2>/dev/null || true
+          ls -la target-x86-64-v*/x86_64-pc-windows-msvc/release/tape-decode-full.exe 2>/dev/null || true
+          ls -la target/x86_64-pc-windows-msvc/release/tape-decode-full.exe 2>/dev/null || true
 
       - name: Test Rust core
         shell: bash
@@ -91,12 +91,12 @@ jobs:
           # Prefer a level binary (lowest first) so it runs on any x86-64 host
           BIN=""
           for lvl in v1 v2 v3 v4; do
-            p="target-x86-64-${lvl}/x86_64-pc-windows-msvc/release/tape-decode.exe"
+            p="target-x86-64-${lvl}/x86_64-pc-windows-msvc/release/tape-decode-full.exe"
             if [ -f "$p" ]; then BIN="$p"; break; fi
           done
-          if [ -z "$BIN" ]; then BIN="target/x86_64-pc-windows-msvc/release/tape-decode.exe"; fi
+          if [ -z "$BIN" ]; then BIN="target/x86_64-pc-windows-msvc/release/tape-decode-full.exe"; fi
           if [ ! -f "$BIN" ]; then
-            echo "No tape-decode.exe found for smoke test"; ls -la target*/x86_64-pc-windows-msvc/release/ || true; exit 1
+            echo "No tape-decode-full.exe found for smoke test"; ls -la target*/x86_64-pc-windows-msvc/release/ || true; exit 1
           fi
           echo "Smoking: $BIN"
           TAPE_DECODE_MICROARCH=x86-64-v1 "$BIN" list-profiles | tee /tmp/tape_decode_profiles.txt
@@ -118,29 +118,29 @@ jobs:
         shell: bash
         run: python scripts/ci/build-windows-decode-bin.py
 
-      - name: Package decode-rust-gui Windows artifact
+      - name: Package tape-decode-full-gui Windows artifact
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          EXE="dist/decode-rust-gui.exe"
+          EXE="dist/tape-decode-full-gui.exe"
           if [ ! -f "$EXE" ]; then
-            echo "decode-rust-gui.exe not produced"
+            echo "tape-decode-full-gui.exe not produced"
             ls -la dist/ || true
             exit 1
           fi
-          cp "$EXE" "decode-rust-gui-windows_${VERSION}_x86_64.exe"
+          cp "$EXE" "tape-decode-full-gui-windows_${VERSION}_x86_64.exe"
 
-      - name: Upload decode-rust-gui Windows artifact
+      - name: Upload tape-decode-full-gui Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: decode-rust-gui-windows-x86_64
+          name: tape-decode-full-gui-windows-x86_64
           path: |
-            decode-rust-gui-windows_*_x86_64.exe
+            tape-decode-full-gui-windows_*_x86_64.exe
           if-no-files-found: warn
 
   linux-decode:
-    name: Linux decode-rust-gui AppImage (${{ matrix.arch }})
+    name: Linux tape-decode-full-gui AppImage (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -186,7 +186,7 @@ jobs:
 
       - name: Build tape-decode core (single, for bundling)
         if: matrix.arch != 'x86_64'
-        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
 
       - name: Build tape-decode core (x86-64 v1-v4 levels, for bundling)
         if: matrix.arch == 'x86_64'
@@ -203,7 +203,7 @@ jobs:
             esac
             echo "::group::Build ${level}"
             CARGO_TARGET_DIR="target-x86-64-${level}" RUSTFLAGS="$rustflags" \
-              cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+              cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
             echo "::endgroup::"
           }
           for level in v1 v2 v3 v4; do
@@ -220,10 +220,10 @@ jobs:
           if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
             BIN=""
             for lvl in v1 v2 v3 v4; do
-              p="target-x86-64-${lvl}/x86_64-unknown-linux-gnu/release/tape-decode"
+              p="target-x86-64-${lvl}/x86_64-unknown-linux-gnu/release/tape-decode-full"
               if [ -f "$p" ]; then BIN="$p"; break; fi
             done
-            if [ -z "$BIN" ]; then BIN="target/x86_64-unknown-linux-gnu/release/tape-decode"; fi
+            if [ -z "$BIN" ]; then BIN="target/x86_64-unknown-linux-gnu/release/tape-decode-full"; fi
             if [ ! -f "$BIN" ]; then
               echo "No tape-decode binary found for smoke"; ls -la target*/x86_64-unknown-linux-gnu/release/ || true; exit 1
             fi
@@ -231,7 +231,7 @@ jobs:
             TAPE_DECODE_MICROARCH=x86-64-v1 "$BIN" list-profiles | tee /tmp/tape_decode_profiles.txt
             grep -q "PAL_VHS" /tmp/tape_decode_profiles.txt
           else
-            BIN="target/aarch64-unknown-linux-gnu/release/tape-decode"
+            BIN="target/aarch64-unknown-linux-gnu/release/tape-decode-full"
             if [ ! -f "$BIN" ]; then
               echo "No tape-decode binary found for smoke"; ls -la target/aarch64-unknown-linux-gnu/release/ || true; exit 1
             fi
@@ -264,7 +264,7 @@ jobs:
       - name: Build launcher binary
         if: matrix.arch != 'x86_64'
         env:
-          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode
+          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode-full
         run: python3 scripts/ci/build-linux-decode-bin.py
 
       - name: Build launcher binary (with microarch levels)
@@ -284,25 +284,25 @@ jobs:
             AppDir/usr/share/icons/hicolor/256x256/apps \
             AppDir/resources/icon
 
-          cp dist/decode-rust-gui AppDir/usr/bin/decode-rust-gui
-          chmod +x AppDir/usr/bin/decode-rust-gui
+          cp dist/tape-decode-full-gui AppDir/usr/bin/tape-decode-full-gui
+          chmod +x AppDir/usr/bin/tape-decode-full-gui
 
-          cp resources/appimage/decode-rust-gui.desktop AppDir/usr/share/applications/decode-rust-gui.desktop
+          cp resources/appimage/tape-decode-full-gui.desktop AppDir/usr/share/applications/tape-decode-full-gui.desktop
           cp resources/appimage/AppRun AppDir/AppRun
           chmod +x AppDir/AppRun
 
-          cp resources/icon/tape-decode-rust-256.png AppDir/usr/share/icons/hicolor/256x256/apps/decode-rust-gui.png
+          cp resources/icon/tape-decode-rust-256.png AppDir/usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png
 
           # Keep one canonical icon file and expose required aliases via symlink to avoid duplicate payload files.
-          ln -sf usr/share/icons/hicolor/256x256/apps/decode-rust-gui.png AppDir/decode-rust-gui.png
-          ln -sf decode-rust-gui.png AppDir/.DirIcon
-          ln -sf ../../decode-rust-gui.png AppDir/resources/icon/tape-decode-rust-256.png
-          ln -sf decode-rust-gui.png AppDir/tape-decode-rust-256.png
+          ln -sf usr/share/icons/hicolor/256x256/apps/tape-decode-full-gui.png AppDir/tape-decode-full-gui.png
+          ln -sf tape-decode-full-gui.png AppDir/.DirIcon
+          ln -sf ../../tape-decode-full-gui.png AppDir/resources/icon/tape-decode-rust-256.png
+          ln -sf tape-decode-full-gui.png AppDir/tape-decode-rust-256.png
 
-          ln -sf usr/share/applications/decode-rust-gui.desktop AppDir/decode-rust-gui.desktop
+          ln -sf usr/share/applications/tape-decode-full-gui.desktop AppDir/tape-decode-full-gui.desktop
 
           APPIMAGE_TOOL="${{ matrix.appimagetool }}"
-          APPIMAGE_NAME="decode-rust-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.AppImage"
+          APPIMAGE_NAME="tape-decode-full-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.AppImage"
 
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/${APPIMAGE_TOOL}"
           chmod +x "${APPIMAGE_TOOL}"
@@ -312,27 +312,27 @@ jobs:
 
           # Only force a microarch level on x86-64 builds. On arm64 the bundled binary is aarch64.
           if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
-            TAPE_DECODE_MICROARCH=x86-64-v1 APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            TAPE_DECODE_MICROARCH=x86-64-v1 APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           else
-            APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            APPIMAGE_EXTRACT_AND_RUN=1 "./${APPIMAGE_NAME}" list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           fi
-          grep -q "PAL_VHS" /tmp/decode-rust-gui_profiles.txt || true
+          grep -q "PAL_VHS" /tmp/tape-decode-full-gui_profiles.txt || true
 
-          ZIP_NAME="decode-rust-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.zip"
+          ZIP_NAME="tape-decode-full-gui-linux_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.zip"
           zip -j "${ZIP_NAME}" "${APPIMAGE_NAME}"
           test -f "${ZIP_NAME}"
           test "$(unzip -Z1 "${ZIP_NAME}" | wc -l)" -eq 1
 
-      - name: Upload decode-rust-gui Linux artifact
+      - name: Upload tape-decode-full-gui Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: decode-rust-gui-linux-${{ matrix.artifact_suffix }}
+          name: tape-decode-full-gui-linux-${{ matrix.artifact_suffix }}
           path: |
-            decode-rust-gui-linux_*_${{ matrix.artifact_suffix }}.zip
+            tape-decode-full-gui-linux_*_${{ matrix.artifact_suffix }}.zip
           if-no-files-found: warn
 
   macos-decode:
-    name: macOS decode-rust-gui DMG (${{ matrix.arch }})
+    name: macOS tape-decode-full-gui DMG (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -374,7 +374,7 @@ jobs:
 
       - name: Build tape-decode core (single, for bundling)
         if: matrix.arch != 'x86_64'
-        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+        run: cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
 
       - name: Build tape-decode core (x86-64 v1-v4 levels, for bundling)
         if: matrix.arch == 'x86_64'
@@ -391,7 +391,7 @@ jobs:
             esac
             echo "::group::Build ${level}"
             CARGO_TARGET_DIR="target-x86-64-${level}" RUSTFLAGS="$rustflags" \
-              cargo build --release --target "${{ matrix.target }}" --bin tape-decode
+              cargo build --release --target "${{ matrix.target }}" --bin tape-decode-full
             echo "::endgroup::"
           }
           for level in v1 v2 v3 v4; do
@@ -408,10 +408,10 @@ jobs:
           if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
             BIN=""
             for lvl in v1 v2 v3 v4; do
-              p="target-x86-64-${lvl}/x86_64-apple-darwin/release/tape-decode"
+              p="target-x86-64-${lvl}/x86_64-apple-darwin/release/tape-decode-full"
               if [ -f "$p" ]; then BIN="$p"; break; fi
             done
-            if [ -z "$BIN" ]; then BIN="target/x86_64-apple-darwin/release/tape-decode"; fi
+            if [ -z "$BIN" ]; then BIN="target/x86_64-apple-darwin/release/tape-decode-full"; fi
             if [ ! -f "$BIN" ]; then
               echo "No tape-decode binary found for smoke"; ls -la target*/x86_64-apple-darwin/release/ || true; exit 1
             fi
@@ -419,7 +419,7 @@ jobs:
             TAPE_DECODE_MICROARCH=x86-64-v1 "$BIN" list-profiles | tee /tmp/tape_decode_profiles.txt
             grep -q "PAL_VHS" /tmp/tape_decode_profiles.txt
           else
-            BIN="target/aarch64-apple-darwin/release/tape-decode"
+            BIN="target/aarch64-apple-darwin/release/tape-decode-full"
             if [ ! -f "$BIN" ]; then
               echo "No tape-decode binary found for smoke"; ls -la target/aarch64-apple-darwin/release/ || true; exit 1
             fi
@@ -441,7 +441,7 @@ jobs:
       - name: Build launcher binary
         if: matrix.arch != 'x86_64'
         env:
-          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode
+          TAPE_DECODE_BIN: target/${{ matrix.target }}/release/tape-decode-full
         run: python3 scripts/ci/build-macos-decode-bin.py
 
       - name: Build launcher binary (with microarch levels)
@@ -449,35 +449,35 @@ jobs:
         run: python3 scripts/ci/build-macos-decode-bin.py
 
       - name: Ad-hoc sign app bundle
-        run: codesign -s - --deep --force dist/decode-rust-gui.app
+        run: codesign -s - --deep --force dist/tape-decode-full-gui.app
 
-      - name: Package decode-rust-gui macOS DMG
+      - name: Package tape-decode-full-gui macOS DMG
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          DMG_NAME="decode-rust-gui-macos_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.dmg"
+          DMG_NAME="tape-decode-full-gui-macos_${BUILD_VERSION}_${{ matrix.artifact_suffix }}.dmg"
           rm -rf build/dmg
           mkdir -p build/dmg
-          cp -R dist/decode-rust-gui.app build/dmg/
+          cp -R dist/tape-decode-full-gui.app build/dmg/
           ln -s /Applications build/dmg/Applications
-          hdiutil create -volname "decode-rust-gui" -srcfolder build/dmg -ov -format UDZO "$DMG_NAME"
+          hdiutil create -volname "tape-decode-full-gui" -srcfolder build/dmg -ov -format UDZO "$DMG_NAME"
           test -f "$DMG_NAME"
 
           # smoke (force v1 on x86-64, none on arm)
           if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
-            TAPE_DECODE_MICROARCH=x86-64-v1 dist/decode-rust-gui.app/Contents/MacOS/decode-rust-gui list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            TAPE_DECODE_MICROARCH=x86-64-v1 dist/tape-decode-full-gui.app/Contents/MacOS/tape-decode-full-gui list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           else
-            dist/decode-rust-gui.app/Contents/MacOS/decode-rust-gui list-profiles > /tmp/decode-rust-gui_profiles.txt || true
+            dist/tape-decode-full-gui.app/Contents/MacOS/tape-decode-full-gui list-profiles > /tmp/tape-decode-full-gui_profiles.txt || true
           fi
-          grep -q "PAL_VHS" /tmp/decode-rust-gui_profiles.txt || true
+          grep -q "PAL_VHS" /tmp/tape-decode-full-gui_profiles.txt || true
 
-      - name: Upload decode-rust-gui macOS artifact
+      - name: Upload tape-decode-full-gui macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: decode-rust-gui-macos-${{ matrix.artifact_suffix }}
-          path: decode-rust-gui-macos_*_${{ matrix.artifact_suffix }}.dmg
+          name: tape-decode-full-gui-macos-${{ matrix.artifact_suffix }}
+          path: tape-decode-full-gui-macos_*_${{ matrix.artifact_suffix }}.dmg
           if-no-files-found: warn
 
   release:
@@ -511,17 +511,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: "decode-rust-gui v${{ steps.version.outputs.version }}"
+          name: "tape-decode-full-gui v${{ steps.version.outputs.version }}"
           draft: true
           body: |
-            ## Decode Launcher (decode-rust-gui)
+            ## Decode Launcher (tape-decode-full-gui)
 
-            This release ships the Decode Launcher ("decode-rust-gui") with built-in support for x86-64 microarchitecture level selection (Auto / v1 / v2 / v3 / v4).
+            This release ships the Decode Launcher ("tape-decode-full-gui") with built-in support for x86-64 microarchitecture level selection (Auto / v1 / v2 / v3 / v4).
 
-            The decode-rust-gui binary is the primary artifact. It provides the GUI when launched normally, and full CLI functionality when invoked from a terminal (e.g. `decode-rust-gui list-profiles`, `decode-rust-gui decode ...`). No separate raw tape-decode binary is released.
+            The tape-decode-full-gui binary is the primary artifact. It provides the GUI when launched normally, and full CLI functionality when invoked from a terminal (e.g. `tape-decode-full-gui list-profiles`, `tape-decode-full-gui decode ...`). No separate raw tape-decode binary is released.
 
             ### Included
-            - decode-rust-gui launcher for:
+            - tape-decode-full-gui launcher for:
               - Windows (x86-64)
               - Linux (x86-64 + arm64 AppImage, packaged in ZIP)
               - macOS (x86-64 + arm64)
@@ -541,8 +541,8 @@ jobs:
           generate_release_notes: true
           append_body: true
           files: |
-            artifacts/decode-rust-gui-windows-x86_64/*.exe
-            artifacts/decode-rust-gui-linux-x86_64/*.zip
-            artifacts/decode-rust-gui-linux-arm64/*.zip
-            artifacts/decode-rust-gui-macos-x86_64/*.dmg
-            artifacts/decode-rust-gui-macos-arm64/*.dmg
+            artifacts/tape-decode-full-gui-windows-x86_64/*.exe
+            artifacts/tape-decode-full-gui-linux-x86_64/*.zip
+            artifacts/tape-decode-full-gui-linux-arm64/*.zip
+            artifacts/tape-decode-full-gui-macos-x86_64/*.dmg
+            artifacts/tape-decode-full-gui-macos-arm64/*.dmg
