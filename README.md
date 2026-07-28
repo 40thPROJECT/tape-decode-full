@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/icon/tape-decode-full-logo.png" alt="Tape Decode Full" width="200">
+</p>
+
 # tape-decode-full
 
 A fork of [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
