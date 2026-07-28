@@ -467,7 +467,9 @@ class DecodeLauncherWindow(QWidget):
         self.output_browse_button = QPushButton("Output…")
 
         self.profile_combo = QComboBox()
-        self.profile_combo.setEditable(True)
+        # Only names from the list are valid; a typed one fails at launch
+        # with nothing on screen to say which are accepted.
+        self.profile_combo.setEditable(False)
         self.profile_combo.addItem(DEFAULT_PROFILE)
         self.refresh_profiles_button = QPushButton("Refresh profiles")
 
@@ -1282,7 +1284,8 @@ class DecodeLauncherWindow(QWidget):
             self,
             "Select input RF file",
             self.input_edit.text().strip() or str(self._effective_working_directory()),
-            "RF captures (*.flac *.lds *.u8 *.s8 *.s16le *.u16le *.f32le *.raw *.bin);;All files (*)",
+            "RF captures (*.ldf *.flac *.lds *.r30 *.u8 *.s8 *.s16le *.u16le *.f32le "
+            "*.raw *.bin);;FLAC captures (*.ldf *.flac);;All files (*)",
         )
         if selected:
             self.input_edit.setText(selected)
