@@ -1,4 +1,4 @@
-<p align="left">
+<p align="center">
   <img src="resources/icon/tape-decode-full-logo.png" alt="Tape Decode Full" width="200">
 </p>
 
