@@ -122,6 +122,19 @@ which is what makes an interrupted run recoverable. Run `--dry-run` first.
 
 ---
 
+### Credits
+
+All the hard work is
+[harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
+[oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode) and
+[harrypm/FLAC-Chop](https://github.com/harrypm/FLAC-Chop) — whose reading of the
+RF Vorbis tags this borrows — and their contributors. This fork only makes it
+finish sooner.
+
+**by ElMamadoJoe**
+
+---
+
 ## Español
 
 Un fork de [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust)
@@ -234,11 +247,15 @@ El sidecar se escribe al final: hasta entonces el fichero sigue cuadrando con su
   campo lleva un patrón que identifica su posición: contenido correcto, orden
   correcto, sin duplicados, tamaños cuadrando con el número de campos, paridad
   alternando, y los dos casos en los que deben negarse.
-All the hard work is [harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
-[oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode) and
-[harrypm/FLAC-Chop](https://github.com/harrypm/FLAC-Chop), whose reading of the
-RF Vorbis tags this borrows. This fork only
-lets more than one machine help.
+
+### Créditos
+
+Todo el trabajo duro es de
+[harrypm/tape-decode-rust](https://github.com/harrypm/tape-decode-rust),
+[oyvindln/vhs-decode](https://github.com/oyvindln/vhs-decode) y
+[harrypm/FLAC-Chop](https://github.com/harrypm/FLAC-Chop) —de quien se toma la
+lectura de las etiquetas Vorbis de RF— y de quienes contribuyen a ellos. Este
+fork solo hace que termine antes.
 
 **by ElMamadoJoe**
 
